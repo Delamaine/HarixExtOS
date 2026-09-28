@@ -33,6 +33,7 @@ namespace {
 
 constexpr size_t kMaxLineLength = 160;
 constexpr size_t kMaxTokens = 12;
+constexpr size_t kMaxAppInstallBytes = 4096;
 constexpr uint8_t kDefaultApChannel = 1;
 
 String inputLine;
@@ -342,7 +343,7 @@ void handleHttpStop();
 void handlePull(const TokenizedLine &cmd);
 void handleUpdate(const TokenizedLine &cmd);
 void tryAutoWifi();
-String readLineBlocking();
+bool readLineBlocking(String &line);
 
 void handleInfo() {
   printSystemInfo();
@@ -850,16 +851,17 @@ void handleWifiConnect(const TokenizedLine &cmd) {
   }
 }
 
-// Non-blocking line read with frequent yields (timeout 15s, checks HTTP every iteration)
-String readLineBlocking() {
-  String line;
+// Blocking line read with frequent yields (timeout 15s, checks HTTP every
+// iteration). Returns false on timeout, true once a line has been read.
+bool readLineBlocking(String &line) {
+  line = String();
   unsigned long start = millis();
   while (millis() - start < 15000UL) {
     while (Serial.available() > 0) {
       char c = static_cast<char>(Serial.read());
       if (c == '\r') continue;
       if (c == '\n') {
-        return line;
+        return true;
       }
       if (isPrintable(static_cast<unsigned char>(c)) && line.length() < kMaxLineLength) {
         line += c;
@@ -871,7 +873,7 @@ String readLineBlocking() {
     delay(50);
     yield();
   }
-  return String();
+  return false;
 }
 
 // Serve a requested LittleFS file and log requests
@@ -956,13 +958,21 @@ void handleServe(const TokenizedLine &cmd) {
   // Ensure WiFi connected; if not, prompt user for SSID/password
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println(F("Not connected to WiFi. Enter SSID (blank to cancel):"));
-    String ssid = readLineBlocking();
+    String ssid;
+    if (!readLineBlocking(ssid)) {
+      Serial.println(F("serve cancelled: timed out waiting for SSID."));
+      return;
+    }
     if (ssid.length() == 0) {
       Serial.println(F("serve cancelled."));
       return;
     }
     Serial.println(F("Enter password (leave blank for open networks):"));
-    String pass = readLineBlocking();
+    String pass;
+    if (!readLineBlocking(pass)) {
+      Serial.println(F("serve cancelled: timed out waiting for password."));
+      return;
+    }
     Serial.print("Connecting to ");
     Serial.print(ssid);
     Serial.flush();
@@ -1039,9 +1049,21 @@ void handleRun(const TokenizedLine &cmd) {
     Serial.println(F("Enter app content (type 'END' on a new line to finish):"));
     String content;
     while (true) {
-      String line = readLineBlocking();
-      if (line == "END") break;
-      content += line + "\n";
+      String line;
+      if (!readLineBlocking(line)) {
+        Serial.println(F("Install aborted: timed out waiting for input."));
+        return;
+      }
+      line.trim();
+      if (line == "END") {
+        break;
+      }
+      if (content.length() + line.length() + 1 > kMaxAppInstallBytes) {
+        Serial.println(F("Install aborted: app content too large."));
+        return;
+      }
+      content += line;
+      content += '\n';
     }
     harixos::api::ApiResult result = harixos::api::AppManager::installApp(cmd.tokens[2], content);
     Serial.println(result.message);
