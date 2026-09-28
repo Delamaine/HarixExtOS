@@ -4,6 +4,38 @@
 #include "system_api.h"
 #include "../kernel/filesystem/filesystem.h"
 
+namespace {
+
+constexpr int kMaxScriptDepth = 8;
+int sScriptDepth = 0;
+
+// Tracks script nesting so a self- or mutually-referencing script cannot
+// recurse until the stack overflows. Unwinds on every exit path.
+class ScriptDepthGuard {
+ public:
+  ScriptDepthGuard() : acquired_(sScriptDepth < kMaxScriptDepth) {
+    if (acquired_) {
+      ++sScriptDepth;
+    }
+  }
+
+  ~ScriptDepthGuard() {
+    if (acquired_) {
+      --sScriptDepth;
+    }
+  }
+
+  ScriptDepthGuard(const ScriptDepthGuard &) = delete;
+  ScriptDepthGuard &operator=(const ScriptDepthGuard &) = delete;
+
+  bool acquired() const { return acquired_; }
+
+ private:
+  bool acquired_;
+};
+
+}  // namespace
+
 namespace harixos {
 namespace api {
 
@@ -205,6 +237,14 @@ ApiResult ScriptEngine::executeCommand(const String &command, Stream &output) {
 }
 
 ApiResult ScriptEngine::executeScript(const String &script, Stream &output) {
+  ScriptDepthGuard guard;
+  if (!guard.acquired()) {
+    String message = "Script nesting limit exceeded (max ";
+    message += kMaxScriptDepth;
+    message += ")";
+    return ApiResult(API_ERROR, message);
+  }
+
   // Split script into lines and execute each
   int startIdx = 0;
   int lineCount = 0;
