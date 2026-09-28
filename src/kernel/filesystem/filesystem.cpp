@@ -7,18 +7,6 @@ bool isAbsolute(const String &path) {
   return path.startsWith("/");
 }
 
-String trimTrailingSlash(const String &path) {
-  if (path.length() <= 1) {
-    return String("/");
-  }
-
-  String result = path;
-  while (result.length() > 1 && result.endsWith("/")) {
-    result.remove(result.length() - 1);
-  }
-  return result;
-}
-
 bool ensureDirectoryChain(const String &path) {
   if (path.length() == 0 || path == "/") {
     return true;
@@ -86,30 +74,66 @@ String normalizePath(const String &path) {
     return String("/");
   }
 
-  String result;
-  result.reserve(path.length());
-  bool previousWasSlash = false;
+  const bool absolute = path[0] == '/' || path[0] == '\\';
 
-  for (size_t index = 0; index < path.length(); ++index) {
-    char c = path[index];
-    if (c == '\\') {
-      c = '/';
+  // Walk the segments, resolving "." and ".." as they are seen. `segments`
+  // holds the resolved path without a leading slash; absolute-ness is
+  // re-applied at the end so relative inputs stay relative.
+  String segments;
+  segments.reserve(path.length());
+
+  const size_t length = path.length();
+  size_t index = 0;
+  while (index < length) {
+    while (index < length && (path[index] == '/' || path[index] == '\\')) {
+      ++index;
     }
-    if (c == '/') {
-      if (previousWasSlash) {
-        continue;
+
+    const size_t start = index;
+    while (index < length && path[index] != '/' && path[index] != '\\') {
+      ++index;
+    }
+    if (index == start) {
+      break;
+    }
+
+    const String segment = path.substring(start, index);
+
+    if (segment == ".") {
+      continue;
+    }
+
+    if (segment == "..") {
+      const bool lastIsDotDot = segments == ".." || segments.endsWith("/..");
+      if (lastIsDotDot) {
+        segments += "/..";
+      } else if (segments.length() == 0) {
+        // Relative paths keep a leading ".."; absolute paths clamp at root.
+        if (!absolute) {
+          segments = "..";
+        }
+      } else {
+        const int slash = segments.lastIndexOf('/');
+        segments = (slash < 0) ? String("") : segments.substring(0, slash);
       }
-      previousWasSlash = true;
-    } else {
-      previousWasSlash = false;
+      continue;
     }
-    result += c;
+
+    if (segments.length() > 0) {
+      segments += '/';
+    }
+    segments += segment;
   }
 
-  if (result.length() == 0) {
-    result = "/";
+  if (absolute) {
+    if (segments.length() == 0) {
+      return String("/");
+    }
+    String result = "/";
+    result += segments;
+    return result;
   }
-  return trimTrailingSlash(result);
+  return segments.length() == 0 ? String(".") : segments;
 }
 
 String resolvePath(const String &cwd, const String &input) {
