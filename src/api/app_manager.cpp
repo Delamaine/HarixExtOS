@@ -76,12 +76,30 @@ ApiResult AppManager::runApp(const String &path, Stream &output) {
     return ApiResult(API_INVALID_ARGUMENT, "App path cannot be empty");
   }
   
-  // Normalize path
-  String fullPath = path;
-  if (!fullPath.startsWith("/")) {
-    fullPath = "/" + fullPath;
+  // Resolve the app location. An explicit path is used as-is; a bare name
+  // looks for an installed app in /apps first, then falls back to the root.
+  String fullPath;
+  if (path.startsWith("/")) {
+    fullPath = path;
+  } else {
+    const String candidates[] = {
+        String(APP_DIR) + "/" + path + ".hx",
+        String(APP_DIR) + "/" + path,
+        "/" + path + ".hx",
+        "/" + path,
+    };
+    const size_t candidateCount = sizeof(candidates) / sizeof(candidates[0]);
+    for (size_t index = 0; index < candidateCount; ++index) {
+      if (LittleFS.exists(candidates[index])) {
+        fullPath = candidates[index];
+        break;
+      }
+    }
+    if (fullPath.length() == 0) {
+      fullPath = "/" + path;
+    }
   }
-  
+
   // Check if file exists
   if (!LittleFS.exists(fullPath)) {
     return ApiResult(API_FILE_NOT_FOUND, "App not found: " + fullPath);
@@ -101,7 +119,7 @@ ApiResult AppManager::runApp(const String &path, Stream &output) {
   
   // Execute script
   output.println();
-  output.printf("Running app: %s\r\n", path.c_str());
+  output.printf("Running app: %s\r\n", fullPath.c_str());
   output.println(F("---"));
   
   ApiResult result = ScriptEngine::executeScript(script, output);
