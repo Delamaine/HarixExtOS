@@ -732,9 +732,11 @@ double evalExpression(const String &expr, bool &ok) {
         char op = opStack[oTop--];
         valStack[++vTop] = applyOp(a, b, op);
       }
+      if (oTop + 1 >= (int)MAXTOK) { ok = false; return NAN; }
       opStack[++oTop] = c;
       ++i; continue;
     }
+
     // number
     if (isdigit((unsigned char)c) || c == '.') {
       String num;
@@ -742,6 +744,7 @@ double evalExpression(const String &expr, bool &ok) {
         num += expr[i++];
       }
       double v = atof(num.c_str());
+      if (vTop + 1 >= (int)MAXTOK) { ok = false; return NAN; }
       valStack[++vTop] = v;
       continue;
     }
@@ -763,12 +766,22 @@ double evalExpression(const String &expr, bool &ok) {
   return valStack[vTop];
 }
 
-void handleCalc(const TokenizedLine &cmd) {
-  if (cmd.count < 2) {
+void handleCalc(const String &line) {
+  // Evaluate the raw line instead of cmd.tokens[1]: tokens are capped at
+  // kMaxTokens, which silently truncated longer expressions, and the token
+  // list also drops the spacing between operands.
+  String expr = line;
+  expr.trim();
+  if (expr.length() >= 4 && expr.substring(0, 4).equalsIgnoreCase("calc")) {
+    expr = expr.substring(4);
+  }
+  expr.trim();
+
+  if (expr.length() == 0) {
     Serial.println(F("Usage: calc <expression>  e.g. calc 1+2*(3-4)/5"));
     return;
   }
-  String expr = cmd.tokens[1];
+
   bool ok = false;
   double res = evalExpression(expr, ok);
   if (!ok || isnan(res)) {
@@ -1932,7 +1945,7 @@ void executeCommand(const String &line) {
   } else if (command == F("fs")) {
     handleFs(cmd);
   } else if (command == F("calc")) {
-    handleCalc(cmd);
+    handleCalc(line);
   } else if (command == F("i2c")) {
     handleI2c(cmd);
   } else if (command == F("cls") || command == F("clear")) {
