@@ -1632,7 +1632,7 @@ void handleTime(const TokenizedLine &cmd) {
 void handleSchedule(const TokenizedLine &cmd) {
   if (cmd.count < 2) {
     harixos::kernel::systemScheduler.listTasks(Serial);
-    Serial.println(F("Usage: schedule add <HH:MM[:SS]> <command> | schedule add +<delay>[s|m|h] <command> | schedule remove <id> | schedule list"));
+    Serial.println(F("Usage: schedule add <sec> <min> <hour> <dom> <month> <dow> <command> | schedule remove <id> | schedule list"));
     return;
   }
 
@@ -1640,49 +1640,28 @@ void handleSchedule(const TokenizedLine &cmd) {
   if (action == F("list")) {
     harixos::kernel::systemScheduler.listTasks(Serial);
   } else if (action == F("add")) {
-    if (cmd.count < 4) {
-      Serial.println(F("Usage: schedule add <time> <command>"));
+    // Interim path: tokens 2..7 are the six cron fields, 8.. is the command.
+    // Tokenizing cannot survive kMaxTokens here - Task 5 switches this to
+    // parsing the raw line, which is Review Focus 1.
+    if (cmd.count < 9) {
+      Serial.println(F("Usage: schedule add <sec> <min> <hour> <dom> <month> <dow> <command>"));
       return;
     }
 
-    String timeStr = cmd.tokens[2];
+    String expression;
+    for (size_t i = 2; i <= 7; ++i) {
+      if (i > 2) expression += ' ';
+      expression += cmd.tokens[i];
+    }
     String fullCommand;
-    for (size_t i = 3; i < cmd.count; ++i) {
-      if (i > 3) fullCommand += " ";
+    for (size_t i = 8; i < cmd.count; ++i) {
+      if (i > 8) fullCommand += ' ';
       fullCommand += cmd.tokens[i];
     }
 
-    if (timeStr.startsWith("+")) {
-      // Relative time: +5s, +1m, +2h
-      unsigned long delayMs = 0;
-      char unit = timeStr[timeStr.length() - 1];
-      if (isdigit(unit)) {
-        delayMs = timeStr.substring(1).toInt() * 1000;
-      } else {
-        long val = timeStr.substring(1, timeStr.length() - 1).toInt();
-        if (unit == 's') delayMs = (unsigned long)val * 1000;
-        else if (unit == 'm') delayMs = (unsigned long)val * 60000;
-        else if (unit == 'h') delayMs = (unsigned long)val * 3600000;
-        else {
-          Serial.println(F("Invalid delay unit. Use s, m, or h."));
-          return;
-        }
-      }
-      int id = harixos::kernel::systemScheduler.addOnceTask(delayMs, fullCommand);
-      if (id >= 0) Serial.printf("Task scheduled (once) with ID %d\r\n", id);
-      else Serial.println(F("Scheduler full."));
-    } else {
-      // Absolute time: HH:MM:SS or HH:MM
-      int hh, mm, ss = 0;
-      int items = sscanf(timeStr.c_str(), "%d:%d:%d", &hh, &mm, &ss);
-      if (items >= 2) {
-        int id = harixos::kernel::systemScheduler.addDailyTask(hh, mm, ss, fullCommand);
-        if (id >= 0) Serial.printf("Task scheduled (daily) with ID %d\r\n", id);
-        else Serial.println(F("Scheduler full."));
-      } else {
-        Serial.println(F("Invalid time format. Use HH:MM[:SS] or +delay"));
-      }
-    }
+    int id = harixos::kernel::systemScheduler.add(expression.c_str(), fullCommand);
+    if (id >= 0) Serial.printf("Task scheduled with ID %d\r\n", id);
+    else Serial.println(F("Task not scheduled (scheduler full or bad expression)."));
   } else if (action == F("remove")) {
     if (cmd.count < 3) {
       Serial.println(F("Usage: schedule remove <id>"));
