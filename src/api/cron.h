@@ -2,6 +2,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <time.h>
 
 namespace harixos {
 namespace api {
@@ -30,6 +31,12 @@ struct Spec {
 // is not field-specific (wrong count). On failure `out` is left untouched,
 // so a caller may treat it as undefined without clearing it first.
 const char *parse(const char *expression, Spec &out, int *badField);
+
+// timeinfo comes from localtime_r(). Returns true on a match.
+// dom and dow are AND'ed, not OR'ed as in standard cron: a field that was
+// written as a bare '*' restricts nothing and so always counts as a match,
+// but when both fields are restricted both must hold.
+bool matches(const Spec &spec, const struct tm &timeinfo);
 
 }  // namespace cron
 }  // namespace api

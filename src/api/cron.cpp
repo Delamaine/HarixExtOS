@@ -173,6 +173,22 @@ const char *parse(const char *expression, Spec &out, int *badField) {
   return nullptr;
 }
 
+bool matches(const Spec &spec, const struct tm &timeinfo) {
+  if (((spec.sec >> timeinfo.tm_sec) & 1ULL) == 0) return false;
+  if (((spec.minute >> timeinfo.tm_min) & 1ULL) == 0) return false;
+  if (((spec.hour >> timeinfo.tm_hour) & 1U) == 0) return false;
+  if (((spec.month >> (timeinfo.tm_mon + 1)) & 1U) == 0) return false;
+
+  // dom and dow are AND'ed, unlike standard cron's OR. A bare '*' restricts
+  // nothing and therefore counts as a match, so a partially restricted pair
+  // reduces to whichever side is actually written out.
+  const bool domOk =
+      !spec.domRestricted || ((spec.dom >> timeinfo.tm_mday) & 1U) != 0;
+  const bool dowOk =
+      !spec.dowRestricted || ((spec.dow >> timeinfo.tm_wday) & 1U) != 0;
+  return domOk && dowOk;
+}
+
 }  // namespace cron
 }  // namespace api
 }  // namespace harixos

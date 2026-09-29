@@ -8,6 +8,7 @@
 #include "api/cron.h"
 
 using harixos::api::cron::Spec;
+using harixos::api::cron::matches;
 using harixos::api::cron::parse;
 
 void setUp(void) {}
@@ -198,6 +199,93 @@ static void test_parse_accepts_extra_whitespace(void) {
   TEST_ASSERT_TRUE(s.dowRestricted);
 }
 
+// Explicit clock tuple so each test states its own time rather than leaning
+// on localtime(). tm_mon is 0-based; matches() adds 1 back.
+static struct tm clockAt(int sec, int min, int hour, int dom, int month, int dow) {
+  struct tm t;
+  memset(&t, 0, sizeof(t));
+  t.tm_sec = sec;
+  t.tm_min = min;
+  t.tm_hour = hour;
+  t.tm_mday = dom;
+  t.tm_mon = month - 1;
+  t.tm_wday = dow;
+  return t;
+}
+
+static Spec specOf(const char *expression) {
+  Spec s;
+  TEST_ASSERT_NULL(parse(expression, s, nullptr));
+  return s;
+}
+
+static void test_matches_every_second(void) {
+  Spec s = specOf("* * * * * *");
+  TEST_ASSERT_TRUE(matches(s, clockAt(42, 59, 23, 31, 12, 6)));
+  TEST_ASSERT_TRUE(matches(s, clockAt(0, 0, 0, 1, 1, 0)));
+}
+
+static void test_matches_exact_second(void) {
+  Spec s = specOf("30 * * * * *");
+  TEST_ASSERT_TRUE(matches(s, clockAt(30, 7, 13, 9, 6, 3)));
+}
+
+static void test_rejects_wrong_second(void) {
+  Spec s = specOf("30 * * * * *");
+  TEST_ASSERT_FALSE(matches(s, clockAt(31, 7, 13, 9, 6, 3)));
+}
+
+static void test_matches_second_list(void) {
+  Spec s = specOf("0,15,30,45 * * * * *");
+  TEST_ASSERT_TRUE(matches(s, clockAt(15, 7, 13, 9, 6, 3)));
+}
+
+static void test_rejects_hour_mismatch(void) {
+  Spec s = specOf("0 0 9 * * *");
+  // 09:00:01 - hour matches, second does not.
+  TEST_ASSERT_FALSE(matches(s, clockAt(1, 0, 9, 9, 6, 3)));
+  // 10:00:00 - hour does not match.
+  TEST_ASSERT_FALSE(matches(s, clockAt(0, 0, 10, 9, 6, 3)));
+}
+
+// Plan table originally wrote the expression as "0 0 9 1 * 3", which leaves
+// month unrestricted and so can never mismatch - see the ledger entry for
+// Task 2. Month is restricted to 3 here so the name means what it says.
+static void test_rejects_month_mismatch(void) {
+  Spec s = specOf("0 0 9 1 3 3");
+  TEST_ASSERT_FALSE(matches(s, clockAt(0, 0, 9, 1, 4, 3)));
+}
+
+static void test_only_dom_restricted_matches_any_dow(void) {
+  Spec s = specOf("0 0 9 15 * *");
+  TEST_ASSERT_TRUE(matches(s, clockAt(0, 0, 9, 15, 6, 4)));
+}
+
+static void test_only_dow_restricted_matches_any_dom(void) {
+  Spec s = specOf("0 0 9 * * 1");
+  TEST_ASSERT_TRUE(matches(s, clockAt(0, 0, 9, 20, 6, 1)));
+}
+
+// Review Focus 2. Standard cron ORs dom and dow when both are restricted;
+// spec 7.2 pins AND. All three expressions below restrict BOTH fields - the
+// plan table had written dom as '*' for these rows, which cannot distinguish
+// AND from OR at all. Clocks 10 and 11 are chosen so that exactly one of the
+// two day fields matches: under OR both would fire, under AND neither does.
+static void test_and_semantics_when_both_restricted(void) {
+  Spec s = specOf("0 0 9 15 * 1");
+  TEST_ASSERT_TRUE(matches(s, clockAt(0, 0, 9, 15, 6, 1)));
+}
+
+static void test_and_semantics_rejects_when_only_dow_matches(void) {
+  Spec s = specOf("0 0 9 15 * 1");
+  TEST_ASSERT_FALSE(matches(s, clockAt(0, 0, 9, 16, 6, 1)));
+}
+
+static void test_and_semantics_rejects_when_only_dom_matches(void) {
+  Spec s = specOf("0 0 9 15 * 1");
+  TEST_ASSERT_FALSE(matches(s, clockAt(0, 0, 9, 15, 6, 4)));
+}
+
 int main(int argc, char **argv) {
   (void)argc;
   (void)argv;
@@ -226,5 +314,16 @@ int main(int argc, char **argv) {
   RUN_TEST(test_parse_sets_dom_restricted);
   RUN_TEST(test_parse_sets_dow_restricted);
   RUN_TEST(test_parse_accepts_extra_whitespace);
+  RUN_TEST(test_matches_every_second);
+  RUN_TEST(test_matches_exact_second);
+  RUN_TEST(test_rejects_wrong_second);
+  RUN_TEST(test_matches_second_list);
+  RUN_TEST(test_rejects_hour_mismatch);
+  RUN_TEST(test_rejects_month_mismatch);
+  RUN_TEST(test_only_dom_restricted_matches_any_dow);
+  RUN_TEST(test_only_dow_restricted_matches_any_dom);
+  RUN_TEST(test_and_semantics_when_both_restricted);
+  RUN_TEST(test_and_semantics_rejects_when_only_dow_matches);
+  RUN_TEST(test_and_semantics_rejects_when_only_dom_matches);
   return UNITY_END();
 }
