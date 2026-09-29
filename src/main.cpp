@@ -26,6 +26,7 @@
 #include "utils/http/http_downloader.h"
 #include "api/app_manager.h"
 #include "api/expr.h"
+#include "api/value_tokens.h"
 #include "api/script_engine.h"
 #include "kernel/scheduler/scheduler.h"
 #include "kernel/cpu_handler/cpu_handler.h"
@@ -2001,6 +2002,8 @@ void setup() {
   } else {
     Serial.println(F("LittleFS mount failed."));
   }
+
+  harixos::api::expr::setResolver(harixos::api::resolveDeviceValueToken);
 
   shellSettings = harixos::loadSettings();
   setenv("TZ", shellSettings.timezone.c_str(), 1);

@@ -1,9 +1,12 @@
-#include "expr.h"
+﻿#include "expr.h"
 
 #include <cmath>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
+
+#include "vars.h"
 
 namespace harixos {
 namespace api {
@@ -83,6 +86,25 @@ char matchOperator(const char *s, size_t i, size_t n, size_t &len) {
   }
   len = 0;
   return '\0';
+}
+
+using ResolverFn = bool (*)(const char *token, size_t tokenLen, double &out);
+ResolverFn s_resolver = nullptr;
+
+bool isIdentStart(char c) {
+  return isalpha((unsigned char)c) != 0 || c == '_';
+}
+
+bool isIdentChar(char c) {
+  return isalnum((unsigned char)c) != 0 || c == '_';
+}
+
+// Shortest form that parses back to the same double: %g for everyday values,
+// %.17g only when %g would lose precision. Keeps "$x + 1" readable without
+// silently rounding a stored value.
+void formatDouble(double v, char *buf, size_t cap) {
+  snprintf(buf, cap, "%g", v);
+  if (strtod(buf, nullptr) != v) snprintf(buf, cap, "%.17g", v);
 }
 
 }  // namespace
@@ -190,6 +212,92 @@ bool evaluateArithmetic(const char *expression, double &out) {
   if (vTop != 0) return false;
   out = val[vTop];
   return true;
+}
+
+void setResolver(bool (*resolve)(const char *token, size_t tokenLen, double &out)) {
+  s_resolver = resolve;
+}
+
+bool expand(const char *expression, char *out, size_t outCapacity,
+            bool (*resolve)(const char *token, size_t tokenLen, double &out)) {
+  if (expression == nullptr || out == nullptr || outCapacity == 0) return false;
+
+  // Usable space is the smaller of the caller's buffer and the module's
+  // hard cap; one byte of either is reserved for the terminator.
+  size_t limit = outCapacity;
+  if (limit > kMaxExpandedLength + 1) limit = kMaxExpandedLength + 1;
+
+  size_t o = 0;
+  const size_t n = strlen(expression);
+  size_t i = 0;
+
+  char num[48];
+  while (i < n) {
+    const char c = expression[i];
+
+    if (c == '$') {                                  // variable reference
+      ++i;
+      if (i >= n || !isIdentStart(expression[i])) return false;
+      const size_t start = i;
+      while (i < n && isIdentChar(expression[i])) ++i;
+      const size_t len = i - start;
+      if (len > vars::kMaxNameLength) return false;
+
+      char name[vars::kMaxNameLength + 1];
+      memcpy(name, expression + start, len);
+      name[len] = '\0';
+
+      double v = 0;
+      if (!vars::get(name, v)) return false;         // undefined is an error
+      formatDouble(v, num, sizeof(num));
+      const size_t numLen = strlen(num);
+      if (o + numLen + 1 > limit) return false;
+      memcpy(out + o, num, numLen);
+      o += numLen;
+      continue;
+    }
+
+    if (isIdentStart(c)) {                           // bare value token
+      const size_t start = i;
+      while (i < n && isIdentChar(expression[i])) ++i;
+      // Optional numeric argument: the whitespace and digits that follow,
+      // so the resolver sees the whole span "readpin 2".
+      size_t j = i;
+      while (j < n && (expression[j] == ' ' || expression[j] == '\t')) ++j;
+      const size_t argStart = j;
+      while (j < n && isdigit((unsigned char)expression[j])) ++j;
+      if (j > argStart) i = j;
+
+      if (resolve == nullptr) return false;
+      double v = 0;
+      if (!resolve(expression + start, i - start, v)) return false;
+      formatDouble(v, num, sizeof(num));
+      const size_t numLen = strlen(num);
+      if (o + numLen + 1 > limit) return false;
+      memcpy(out + o, num, numLen);
+      o += numLen;
+      continue;
+    }
+
+    if (strchr("+-*/()<>!=.", c) != nullptr || isspace((unsigned char)c) ||
+        isdigit((unsigned char)c)) {                 // pass through
+      if (o + 2 > limit) return false;
+      out[o++] = c;
+      ++i;
+      continue;
+    }
+
+    return false;                                    // anything else fails
+  }
+
+  out[o] = '\0';
+  return true;
+}
+
+bool evaluate(const char *expression, double &out) {
+  char buf[kMaxExpandedLength + 1];
+  if (!expand(expression, buf, sizeof(buf), s_resolver)) return false;
+  return evaluateArithmetic(buf, out);
 }
 
 }  // namespace expr

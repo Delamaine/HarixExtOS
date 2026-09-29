@@ -2,12 +2,37 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 
 #include "api/expr.h"
+#include "api/vars.h"
 
 using harixos::api::expr::evaluateArithmetic;
+using harixos::api::expr::evaluate;
+using harixos::api::expr::expand;
+using harixos::api::expr::setResolver;
+using harixos::api::vars::clear;
+using harixos::api::vars::set;
 
-void setUp(void) {}
+// Last token handed to the resolver, so tests can assert on the exact span
+// expand() consumed (e.g. "readpin 2" rather than "readpin").
+static char s_lastToken[64];
+
+static bool fakeResolve(const char *token, size_t tokenLen, double &out) {
+  size_t n = tokenLen < sizeof(s_lastToken) - 1 ? tokenLen : sizeof(s_lastToken) - 1;
+  memcpy(s_lastToken, token, n);
+  s_lastToken[n] = '\0';
+
+  if (tokenLen == 4 && memcmp(token, "heap", 4) == 0) { out = 41984; return true; }
+  if (tokenLen == 9 && memcmp(token, "readpin 2", 9) == 0) { out = 1; return true; }
+  return false;
+}
+
+void setUp(void) {
+  clear();
+  s_lastToken[0] = '\0';
+  setResolver(fakeResolve);
+}
 void tearDown(void) {}
 
 static void test_precedence_multiply_over_add(void) {
@@ -153,6 +178,80 @@ static void test_operand_overflow_fails(void) {
   TEST_ASSERT_FALSE(evaluateArithmetic(expr, v));
 }
 
+static void test_expand_substitutes_variable(void) {
+  char out[128];
+  TEST_ASSERT_TRUE(set("x", 5));
+  TEST_ASSERT_TRUE(expand("$x + 1", out, sizeof(out), fakeResolve));
+  TEST_ASSERT_EQUAL_STRING("5 + 1", out);
+}
+
+static void test_expand_undefined_variable_fails(void) {
+  char out[128];
+  TEST_ASSERT_FALSE(expand("$nope", out, sizeof(out), fakeResolve));
+}
+
+static void test_expand_value_token_heap(void) {
+  char out[128];
+  TEST_ASSERT_TRUE(expand("heap", out, sizeof(out), fakeResolve));
+  TEST_ASSERT_EQUAL_STRING("41984", out);
+}
+
+static void test_expand_value_token_with_argument(void) {
+  char out[128];
+  TEST_ASSERT_TRUE(expand("readpin 2 + 1", out, sizeof(out), fakeResolve));
+  TEST_ASSERT_EQUAL_STRING("1 + 1", out);
+  TEST_ASSERT_EQUAL_STRING("readpin 2", s_lastToken);
+}
+
+static void test_expand_unknown_bare_word_fails(void) {
+  char out[128];
+  TEST_ASSERT_FALSE(expand("banana", out, sizeof(out), fakeResolve));
+}
+
+static void test_expand_rejects_over_length_result(void) {
+  // 20 copies of a 15-digit value with spaces between = 319 chars, past
+  // kMaxExpandedLength (256), even though out[] itself is large enough.
+  char out[512];
+  TEST_ASSERT_TRUE(set("x", 123456789012345.0));
+
+  char in[128];
+  size_t pos = 0;
+  for (int i = 0; i < 20; ++i) {
+    if (i > 0) in[pos++] = ' ';
+    in[pos++] = '$';
+    in[pos++] = 'x';
+  }
+  in[pos] = '\0';
+
+  TEST_ASSERT_FALSE(expand(in, out, sizeof(out), fakeResolve));
+}
+
+static void test_expand_leaves_pure_arithmetic_untouched(void) {
+  char out[128];
+  TEST_ASSERT_TRUE(expand("1 + 2", out, sizeof(out), fakeResolve));
+  TEST_ASSERT_EQUAL_STRING("1 + 2", out);
+}
+
+static void test_evaluate_combines_expand_and_arithmetic(void) {
+  double v = 0;
+  TEST_ASSERT_TRUE(set("x", 5));
+  TEST_ASSERT_TRUE(evaluate("$x * 2", v));
+  TEST_ASSERT_EQUAL_DOUBLE(10, v);
+}
+
+static void test_evaluate_fails_when_resolver_absent(void) {
+  double v = 0;
+  setResolver(nullptr);
+  TEST_ASSERT_FALSE(evaluate("heap", v));
+}
+
+static void test_repeated_variable_in_one_expression(void) {
+  double v = 0;
+  TEST_ASSERT_TRUE(set("x", 3));
+  TEST_ASSERT_TRUE(evaluate("$x + $x", v));
+  TEST_ASSERT_EQUAL_DOUBLE(6, v);
+}
+
 int main(int argc, char **argv) {
   UNITY_BEGIN();
   RUN_TEST(test_precedence_multiply_over_add);
@@ -178,5 +277,15 @@ int main(int argc, char **argv) {
   RUN_TEST(test_equality_lowest_precedence);
   RUN_TEST(test_comparison_over_unbalanced_parens);
   RUN_TEST(test_operand_overflow_fails);
+  RUN_TEST(test_expand_substitutes_variable);
+  RUN_TEST(test_expand_undefined_variable_fails);
+  RUN_TEST(test_expand_value_token_heap);
+  RUN_TEST(test_expand_value_token_with_argument);
+  RUN_TEST(test_expand_unknown_bare_word_fails);
+  RUN_TEST(test_expand_rejects_over_length_result);
+  RUN_TEST(test_expand_leaves_pure_arithmetic_untouched);
+  RUN_TEST(test_evaluate_combines_expand_and_arithmetic);
+  RUN_TEST(test_evaluate_fails_when_resolver_absent);
+  RUN_TEST(test_repeated_variable_in_one_expression);
   return UNITY_END();
 }
