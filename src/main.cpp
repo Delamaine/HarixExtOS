@@ -1629,53 +1629,91 @@ void handleTime(const TokenizedLine &cmd) {
   }
 }
 
-void handleSchedule(const TokenizedLine &cmd) {
-  if (cmd.count < 2) {
+void handleSchedule(const String &line) {
+  // Parse the raw line rather than cmd.tokens: `schedule add` plus six cron
+  // fields already consumes 8 of kMaxTokens=12, so reassembling the token
+  // list would silently truncate the command to its first four words.
+  String rest = line;
+  rest.trim();
+  if (rest.length() >= 8 && rest.substring(0, 8).equalsIgnoreCase("schedule")) {
+    rest = rest.substring(8);
+  }
+  rest.trim();
+
+  if (rest.length() == 0) {
     harixos::kernel::systemScheduler.listTasks(Serial);
     Serial.println(F("Usage: schedule add <sec> <min> <hour> <dom> <month> <dow> <command> | schedule remove <id> | schedule list"));
     return;
   }
 
-  String action = toLowerCopy(cmd.tokens[1]);
+  int sep = rest.indexOf(' ');
+  String action = toLowerCopy(sep < 0 ? rest : rest.substring(0, sep));
+  String tail = sep < 0 ? String("") : rest.substring(sep + 1);
+  tail.trim();
+
   if (action == F("list")) {
     harixos::kernel::systemScheduler.listTasks(Serial);
-  } else if (action == F("add")) {
-    // Interim path: tokens 2..7 are the six cron fields, 8.. is the command.
-    // Tokenizing cannot survive kMaxTokens here - Task 5 switches this to
-    // parsing the raw line, which is Review Focus 1.
-    if (cmd.count < 9) {
+    return;
+  }
+
+  if (action == F("add")) {
+    if (tail.length() == 0) {
       Serial.println(F("Usage: schedule add <sec> <min> <hour> <dom> <month> <dow> <command>"));
       return;
     }
 
-    String expression;
-    for (size_t i = 2; i <= 7; ++i) {
-      if (i > 2) expression += ' ';
-      expression += cmd.tokens[i];
+    // The remainder is exactly one save line without its newline, so the
+    // save-format budget is the right cap for it.
+    char tailBuf[harixos::api::cron::kMaxSaveLine];
+    tail.toCharArray(tailBuf, sizeof(tailBuf));
+
+    char cronBuf[64];
+    const char *command = nullptr;
+    const char *err = harixos::api::cron::splitLine(tailBuf, cronBuf,
+                                                    sizeof(cronBuf), &command);
+    int badField = -1;
+    if (err == nullptr) {
+      harixos::api::cron::Spec spec;
+      err = harixos::api::cron::parse(cronBuf, spec, &badField);
     }
-    String fullCommand;
-    for (size_t i = 8; i < cmd.count; ++i) {
-      if (i > 8) fullCommand += ' ';
-      fullCommand += cmd.tokens[i];
+    if (err != nullptr) {
+      if (badField >= 0) Serial.printf("%s (field %d)\r\n", err, badField);
+      else Serial.println(err);
+      return;
     }
 
-    int id = harixos::kernel::systemScheduler.add(expression.c_str(), fullCommand);
-    if (id >= 0) Serial.printf("Task scheduled with ID %d\r\n", id);
-    else Serial.println(F("Task not scheduled (scheduler full or bad expression)."));
-  } else if (action == F("remove")) {
-    if (cmd.count < 3) {
+    int id = harixos::kernel::systemScheduler.add(cronBuf, String(command));
+    if (id < 0) {
+      Serial.println(F("Scheduler full."));
+      return;
+    }
+    if (!harixos::kernel::systemScheduler.save()) {
+      Serial.printf("Task %d scheduled, but /harixos/schedule.cfg could not be written.\r\n", id);
+      return;
+    }
+    Serial.printf("Task scheduled with ID %d\r\n", id);
+    return;
+  }
+
+  if (action == F("remove")) {
+    if (tail.length() == 0) {
       Serial.println(F("Usage: schedule remove <id>"));
       return;
     }
-    int id = cmd.tokens[2].toInt();
-    if (harixos::kernel::systemScheduler.removeTask(id)) {
-      Serial.println(F("Task removed."));
-    } else {
+    int id = tail.toInt();
+    if (!harixos::kernel::systemScheduler.removeTask(id)) {
       Serial.println(F("Task not found."));
+      return;
     }
-  } else {
-    Serial.println(F("Unknown schedule action."));
+    if (!harixos::kernel::systemScheduler.save()) {
+      Serial.println(F("Task removed, but /harixos/schedule.cfg could not be written."));
+      return;
+    }
+    Serial.println(F("Task removed."));
+    return;
   }
+
+  Serial.println(F("Unknown schedule action."));
 }
 
 void handleHelp(const TokenizedLine &cmd) {
@@ -1784,17 +1822,21 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("       or: time sync <POSIX_TZ_STRING>"));
     Serial.println(F("  Use 'time list-tz' for examples like IST-5:30"));
   } else if (topic == F("schedule")) {
-    Serial.println(F("Scheduler commands:"));
-    Serial.println(F("  schedule list            List all tasks"));
-    Serial.println(F("  schedule remove <id>     Remove task by ID"));
-    Serial.println(F("  schedule add <HH:MM:SS> <cmd>  Daily task"));
-    Serial.println(F("  schedule add +<delay><unit> <cmd> One-off task"));
-    Serial.println(F("  Units: s (sec), m (min), h (hour)"));
+    Serial.println(F("Scheduler commands (6-field cron: sec min hour dom month dow):"));
+    Serial.println(F("  schedule list                     List all tasks"));
+    Serial.println(F("  schedule remove <id>              Remove task by ID"));
+    Serial.println(F("  schedule add <6 fields> <command> Add a task"));
+    Serial.println();
+    Serial.println(F("Fields: 0-59 sec, 0-59 min, 0-23 hour, 1-31 dom,"));
+    Serial.println(F("        1-12 month, 0-6 dow (0 = Sunday)"));
+    Serial.println(F("Syntax: *  n  a-b  */n  a-b/n  comma lists"));
+    Serial.println(F("  dom and dow are AND'ed when both are restricted."));
+    Serial.println(F("  Tasks are saved automatically; there is no save command."));
     Serial.println();
     Serial.println(F("Examples:"));
-    Serial.println(F("  schedule add 14:30:00 'gpio 2 toggle'"));
-    Serial.println(F("  schedule add +5s 'gpio 2 on'"));
-    Serial.println(F("  schedule add +10s run test.hx"));
+    Serial.println(F("  schedule add */5 * * * * * heap"));
+    Serial.println(F("  schedule add 0 30 14 * * * settings save"));
+    Serial.println(F("  schedule add 0 0 9 * * 1 ping"));
   } else if (topic == F("update")) {
     Serial.println(F("Update commands:"));
     Serial.println(F("  update check         Check for system updates via GitHub"));
@@ -1883,7 +1925,7 @@ void executeCommand(const String &line) {
   } else if (command == F("time")) {
     handleTime(cmd);
   } else if (command == F("schedule")) {
-    handleSchedule(cmd);
+    handleSchedule(line);
   } else if (command == F("update")) {
     handleUpdate(cmd);
   } else {

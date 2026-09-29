@@ -13,7 +13,7 @@ const char kSchedulePath[] = "/harixos/schedule.cfg";
 
 Scheduler systemScheduler;
 
-Scheduler::Scheduler() : taskCount(0), nextId(1), lastExecutedSecond(-1), lastExecutedMinute(-1), lastExecutedHour(-1) {}
+Scheduler::Scheduler() : taskCount(0), nextId(1), lastExecutedSecond(-1), lastExecutedMinute(-1), lastExecutedHour(-1), timeWarningPrinted(false) {}
 
 int Scheduler::add(const char *expression, const String &command) {
   if (expression == nullptr || taskCount >= MAX_TASKS) {
@@ -65,6 +65,13 @@ void Scheduler::update() {
   struct tm *timeinfo = (now >= 1000000000) ? localtime(&now) : nullptr;
 
   if (timeinfo == nullptr) {
+    // Until NTP has synced there is nothing to match against, and silently
+    // doing nothing reads as a broken scheduler. Warn once per boot, and only
+    // when a task exists that would otherwise have fired.
+    if (!timeWarningPrinted && taskCount > 0) {
+      timeWarningPrinted = true;
+      Serial.println(F("\r\n[Scheduler] no valid system time, cron not running"));
+    }
     return;
   }
 

@@ -44,6 +44,7 @@ private:
   int lastExecutedSecond;
   int lastExecutedMinute;
   int lastExecutedHour;
+  bool timeWarningPrinted;
 };
 
 // Global scheduler instance
