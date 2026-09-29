@@ -25,6 +25,7 @@
 #include "kernel/filesystem/filesystem.h"
 #include "utils/http/http_downloader.h"
 #include "api/app_manager.h"
+#include "api/expr.h"
 #include "api/script_engine.h"
 #include "kernel/scheduler/scheduler.h"
 #include "kernel/cpu_handler/cpu_handler.h"
@@ -680,96 +681,6 @@ void handleSettings(const TokenizedLine &cmd) {
   }
 }
 
-// --- Simple expression evaluator (shunting-yard + RPN) ---
-bool isOp(char c) {
-  return c == '+' || c == '-' || c == '*' || c == '/';
-}
-
-int prec(char op) {
-  if (op == '+' || op == '-') return 1;
-  if (op == '*' || op == '/') return 2;
-  return 0;
-}
-
-double applyOp(double a, double b, char op) {
-  switch (op) {
-    case '+': return a + b;
-    case '-': return a - b;
-    case '*': return a * b;
-    case '/': return b == 0 ? NAN : a / b;
-  }
-  return NAN;
-}
-
-double evalExpression(const String &expr, bool &ok) {
-  const size_t MAXTOK = 128;
-  double valStack[MAXTOK];
-  char opStack[MAXTOK];
-  int vTop = -1;
-  int oTop = -1;
-
-  size_t i = 0;
-  size_t n = expr.length();
-  while (i < n) {
-    char c = expr[i];
-    if (isspace((unsigned char)c)) { ++i; continue; }
-    if (c == '(') {
-      if (oTop + 1 >= (int)MAXTOK) { ok = false; return NAN; }
-      opStack[++oTop] = c; ++i; continue;
-    }
-    if (c == ')') {
-      while (oTop >= 0 && opStack[oTop] != '(') {
-        if (vTop < 1) { ok = false; return NAN; }
-        double b = valStack[vTop--];
-        double a = valStack[vTop--];
-        char op = opStack[oTop--];
-        valStack[++vTop] = applyOp(a, b, op);
-      }
-      if (oTop >= 0 && opStack[oTop] == '(') --oTop;
-      ++i; continue;
-    }
-    if (isOp(c)) {
-      while (oTop >= 0 && isOp(opStack[oTop]) && prec(opStack[oTop]) >= prec(c)) {
-        if (vTop < 1) { ok = false; return NAN; }
-        double b = valStack[vTop--];
-        double a = valStack[vTop--];
-        char op = opStack[oTop--];
-        valStack[++vTop] = applyOp(a, b, op);
-      }
-      if (oTop + 1 >= (int)MAXTOK) { ok = false; return NAN; }
-      opStack[++oTop] = c;
-      ++i; continue;
-    }
-
-    // number
-    if (isdigit((unsigned char)c) || c == '.') {
-      String num;
-      while (i < n && (isdigit((unsigned char)expr[i]) || expr[i] == '.')) {
-        num += expr[i++];
-      }
-      double v = atof(num.c_str());
-      if (vTop + 1 >= (int)MAXTOK) { ok = false; return NAN; }
-      valStack[++vTop] = v;
-      continue;
-    }
-    // unknown char
-    ok = false; return NAN;
-  }
-
-  while (oTop >= 0) {
-    if (opStack[oTop] == '(' || opStack[oTop] == ')') { ok = false; return NAN; }
-    if (vTop < 1) { ok = false; return NAN; }
-    double b = valStack[vTop--];
-    double a = valStack[vTop--];
-    char op = opStack[oTop--];
-    valStack[++vTop] = applyOp(a, b, op);
-  }
-
-  if (vTop != 0) { ok = false; return NAN; }
-  ok = true;
-  return valStack[vTop];
-}
-
 void handleCalc(const String &line) {
   // Evaluate the raw line instead of cmd.tokens[1]: tokens are capped at
   // kMaxTokens, which silently truncated longer expressions, and the token
@@ -786,9 +697,8 @@ void handleCalc(const String &line) {
     return;
   }
 
-  bool ok = false;
-  double res = evalExpression(expr, ok);
-  if (!ok || isnan(res)) {
+  double res = 0;
+  if (!harixos::api::expr::evaluateArithmetic(expr.c_str(), res) || isnan(res)) {
     Serial.println(F("Invalid expression."));
     return;
   }
