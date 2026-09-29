@@ -1013,6 +1013,10 @@ void handleServe(const TokenizedLine &cmd) {
       return;
     }
     Serial.println(F("Connected."));
+    shellSettings.wifiSSID = ssid;
+    shellSettings.wifiPassword = pass;
+    harixos::saveSettings(shellSettings);
+    Serial.println(F("WiFi credentials saved. Auto-connect enabled."));
   }
 
   // Stop existing server if running
