@@ -9,6 +9,8 @@ const char *kSettingsPath = "/harixos/settings.cfg";
 
 }  // namespace
 
+AppSettings shellSettings;
+
 AppSettings loadSettings() {
   AppSettings settings;
   if (!exists(kSettingsPath)) {

@@ -29,6 +29,11 @@
 #include "kernel/scheduler/scheduler.h"
 #include "kernel/cpu_handler/cpu_handler.h"
 
+// shellSettings now lives in the settings module so wifi_api.cpp can reach it;
+// main.cpp uses it unqualified ~29 times, so import just that one name rather
+// than the whole namespace.
+using harixos::shellSettings;
+
 namespace {
 
 constexpr size_t kMaxLineLength = 160;
@@ -39,7 +44,6 @@ constexpr uint8_t kDefaultApChannel = 1;
 String inputLine;
 bool promptVisible = false;
 String currentWorkingDirectory = "/";
-harixos::AppSettings shellSettings;
 
 // Simple HTTP file server
 ESP8266WebServer *httpServer = nullptr;

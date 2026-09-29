@@ -16,4 +16,6 @@ AppSettings loadSettings();
 bool saveSettings(const AppSettings &settings);
 void printSettings(const AppSettings &settings, Print &out);
 
+extern AppSettings shellSettings;
+
 }  // namespace harixos
