@@ -234,6 +234,29 @@ static void test_expand_leaves_pure_arithmetic_untouched(void) {
   TEST_ASSERT_EQUAL_STRING("1 + 2", out);
 }
 
+// The pass-through character class is the only path real arithmetic takes, so
+// it has to be pinned: without these, deleting . ( ) / - or < > = ! from
+// strchr("+-*/()<>!=.") would leave every other test green.
+static void test_expand_passes_arithmetic_structure_through(void) {
+  char out[128];
+  const char *in = "-1.5 * (2 + 3) / 4";
+  TEST_ASSERT_TRUE(expand(in, out, sizeof(out), fakeResolve));
+  TEST_ASSERT_EQUAL_STRING(in, out);
+}
+
+static void test_expand_passes_comparison_symbols_through(void) {
+  char out[128];
+  const char *in = "1 < 2 <= 3 >= 0.5 > 0 == 1 != 0";
+  TEST_ASSERT_TRUE(expand(in, out, sizeof(out), fakeResolve));
+  TEST_ASSERT_EQUAL_STRING(in, out);
+}
+
+static void test_evaluate_handles_decimals_and_parentheses(void) {
+  double v = 0;
+  TEST_ASSERT_TRUE(evaluate("1.5 + (2 - 3) / 4", v));
+  TEST_ASSERT_EQUAL_DOUBLE(1.25, v);
+}
+
 static void test_evaluate_combines_expand_and_arithmetic(void) {
   double v = 0;
   TEST_ASSERT_TRUE(set("x", 5));
@@ -366,6 +389,9 @@ int main(int argc, char **argv) {
   RUN_TEST(test_expand_unknown_bare_word_fails);
   RUN_TEST(test_expand_rejects_over_length_result);
   RUN_TEST(test_expand_leaves_pure_arithmetic_untouched);
+  RUN_TEST(test_expand_passes_arithmetic_structure_through);
+  RUN_TEST(test_expand_passes_comparison_symbols_through);
+  RUN_TEST(test_evaluate_handles_decimals_and_parentheses);
   RUN_TEST(test_evaluate_combines_expand_and_arithmetic);
   RUN_TEST(test_evaluate_fails_when_resolver_absent);
   RUN_TEST(test_repeated_variable_in_one_expression);

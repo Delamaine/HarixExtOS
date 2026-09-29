@@ -349,8 +349,11 @@ const char *assign(const char *argsAfterSet, double *valueOut) {
   if (msg != nullptr) return msg;
 
   // 2. Evaluate next: an invalid expression must not clobber the old value.
+  // Division by zero yields NAN and evaluate() reports success for it, so it
+  // has to be rejected here — otherwise `set x = 1/0` would store a NaN that
+  // every later read of $x then refuses to format.
   double v = 0;
-  if (!evaluate(expression, v)) return "Invalid expression.";
+  if (!evaluate(expression, v) || std::isnan(v)) return "Invalid expression.";
 
   // 3. Store only after 1 and 2 both succeeded.
   if (!vars::set(name, v)) return "Too many variables.";

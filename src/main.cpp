@@ -712,7 +712,10 @@ void handleSet(const String &line) {
   // the same single implementation the script dispatcher uses.
   String args = line;
   args.trim();
-  if (args.length() >= 4 && args.substring(0, 4).equalsIgnoreCase("set")) {
+  // Compare against "set " (4 chars) rather than "set": substring(0, 4)
+  // yields four characters, and String::equalsIgnoreCase returns false on a
+  // length mismatch, so a 3-char needle could never match.
+  if (args.length() >= 4 && args.substring(0, 4).equalsIgnoreCase("set ")) {
     args = args.substring(4);
   }
 
