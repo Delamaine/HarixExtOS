@@ -1,6 +1,8 @@
 #include "wifi_api.h"
 #include <ESP8266WiFi.h>
 
+#include "../apps/settings/settings.h"
+
 namespace harixos {
 namespace api {
 
@@ -62,6 +64,9 @@ ApiResult WiFiAPI::connect(const String &ssid, const String &password, uint32_t 
   }
   
   if (WiFi.status() == WL_CONNECTED) {
+    shellSettings.wifiSSID = ssid;
+    shellSettings.wifiPassword = password;
+    harixos::saveSettings(shellSettings);
     return ApiResult(API_OK, "Connected to " + ssid);
   } else {
     return ApiResult(API_WIFI_CONNECTION_FAILED, "Failed: " + wifiStatusToString(WiFi.status()));
