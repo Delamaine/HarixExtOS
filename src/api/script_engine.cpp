@@ -1,4 +1,5 @@
 #include "script_engine.h"
+#include "block_stack.h"
 #include "expr.h"
 #include "gpio_api.h"
 #include "wifi_api.h"
@@ -263,7 +264,11 @@ ApiResult ScriptEngine::executeScript(const String &script, Stream &output) {
   int lineCount = 0;
   int errorCount = 0;
   int scriptLen = script.length();
-  
+
+  // if/else/end state lives for the whole script, not per command. Kept out
+  // of executeCommand so a scheduled `if` still reports Unknown command.
+  harixos::api::BlockStack blocks;
+
   output.println(F("--- Script Execution Start ---"));
   
   while (startIdx < scriptLen) {
@@ -276,17 +281,52 @@ ApiResult ScriptEngine::executeScript(const String &script, Stream &output) {
     line.trim();
     
     if (line.length() > 0 && !line.startsWith("#")) {
-      ApiResult result = executeCommand(line, output);
-      if (result.isError()) {
-        output.printf("[ERROR] %s: %s\r\n", line.c_str(), result.message.c_str());
-        ++errorCount;
-      } else if (result.message.length() > 0) {
-        output.printf("[OK] %s\r\n", result.message.c_str());
+      Command cmd = parseCommand(line);
+      cmd.name.toLowerCase();
+
+      if (cmd.name == "if") {
+        bool cond = false;
+        if (!blocks.skipping()) {
+          double v = 0;
+          if (!harixos::api::expr::evaluate(cmd.args.c_str(), v)) {
+            output.printf("[ERROR] if %s: Invalid expression.\r\n", cmd.args.c_str());
+            ++errorCount;
+          } else {
+            cond = !isnan(v) && v != 0;
+          }
+        }
+        const char *err = blocks.onEvent(harixos::api::BlockEvent::If, cond);
+        if (err != nullptr) {
+          output.printf("[ERROR] %s: %s\r\n", line.c_str(), err);
+          ++errorCount;
+        }
+      } else if (cmd.name == "else" || cmd.name == "end") {
+        const char *err = blocks.onEvent(
+            cmd.name == "else" ? harixos::api::BlockEvent::Else
+                               : harixos::api::BlockEvent::End,
+            false);
+        if (err != nullptr) {
+          output.printf("[ERROR] %s: %s\r\n", line.c_str(), err);
+          ++errorCount;
+        }
+      } else if (!blocks.skipping()) {
+        ApiResult result = executeCommand(line, output);
+        if (result.isError()) {
+          output.printf("[ERROR] %s: %s\r\n", line.c_str(), result.message.c_str());
+          ++errorCount;
+        } else if (result.message.length() > 0) {
+          output.printf("[OK] %s\r\n", result.message.c_str());
+        }
       }
       ++lineCount;
     }
     
     startIdx = endIdx + 1;
+  }
+
+  if (blocks.unclosedCount() > 0) {
+    output.printf("[ERROR] %d unclosed if block(s)\r\n", blocks.unclosedCount());
+    ++errorCount;
   }
   
   output.printf("--- Script Complete: %d lines, %d errors ---\r\n", lineCount, errorCount);
