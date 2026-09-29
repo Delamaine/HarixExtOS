@@ -52,10 +52,10 @@ void Scheduler::listTasks(Print &out) {
     return;
   }
   out.println(F("Scheduled Tasks:"));
-  out.println(F("ID | Cron              | Command"));
-  out.println(F("-----------------------------------"));
+  out.println(F("ID | Cron                  | Command"));
+  out.println(F("---------------------------------------------"));
   for (int i = 0; i < taskCount; ++i) {
-    out.printf("%2d | %-17s | %s\r\n", tasks[i].id,
+    out.printf("%2d | %-21s | %s\r\n", tasks[i].id,
                tasks[i].expression.c_str(), tasks[i].command.c_str());
   }
 }
@@ -90,7 +90,15 @@ void Scheduler::update() {
     if (api::cron::matches(tasks[i].spec, *timeinfo)) {
       Serial.printf("\r\n[Scheduler] Executing task #%d: %s\r\n", tasks[i].id,
                     tasks[i].command.c_str());
-      harixos::api::ScriptEngine::executeCommand(tasks[i].command, Serial);
+      harixos::api::ApiResult result =
+          harixos::api::ScriptEngine::executeCommand(tasks[i].command, Serial);
+      if (result.isError()) {
+        // Without this a failed scheduled command looks identical to one that
+        // produced no output, so "cat /nope" and "settings save" on a full FS
+        // both read as silently broken.
+        Serial.printf("[ERROR] %s: %s\r\n", tasks[i].command.c_str(),
+                      result.message.c_str());
+      }
       Serial.print(F("\r\nHarixOS> "));
     }
   }
@@ -135,6 +143,13 @@ bool Scheduler::load() {
     }
 
     char lineBuf[api::cron::kMaxSaveLine];
+    if (raw.length() >= sizeof(lineBuf)) {
+      // toCharArray would silently cut the command short, and a truncated line
+      // can still parse — loading a corrupted task with no warning at all.
+      Serial.printf("[Scheduler] skipping over-long schedule.cfg line (%u chars)\r\n",
+                    (unsigned)raw.length());
+      continue;
+    }
     raw.toCharArray(lineBuf, sizeof(lineBuf));
 
     char cronBuf[64];
