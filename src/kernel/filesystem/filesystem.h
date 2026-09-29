@@ -6,6 +6,11 @@
 
 namespace harixos {
 
+// Shared shell + script working directory. Lives here rather than in
+// main.cpp's anonymous namespace so the script engine can resolve relative
+// paths against the same value the shell does.
+extern String currentWorkingDirectory;
+
 String normalizePath(const String &path);
 String resolvePath(const String &cwd, const String &input);
 String parentPath(const String &path);

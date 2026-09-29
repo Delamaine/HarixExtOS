@@ -14,6 +14,10 @@ namespace api {
 //   delay 1000
 //   gpio 2 off
 //   wifi scan
+//   set count = 0
+//   if count > 5
+//     print done
+//   end
 
 class ScriptEngine {
 public:
@@ -35,6 +39,13 @@ private:
   static ApiResult handlePrintCommand(const String &args, Stream &output);
   static ApiResult handleSetCommand(const String &args, Stream &output);
   static ApiResult handleRunCommand(const String &args, Stream &output);
+
+  // Keyword groups widened so `schedule add` can run real commands. Each
+  // delegates to the API or filesystem layer; none reimplements a shell
+  // handler. See script_engine.cpp for the per-keyword mapping.
+  static ApiResult handleSystemValueCommand(const String &name, const String &args, Stream &output);
+  static ApiResult handleFilesystemCommand(const String &name, const String &args, Stream &output);
+  static ApiResult handleSettingsTimeCommand(const String &name, const String &args, Stream &output);
   
   // Tokenize a line into parts
   struct Command {

@@ -36,6 +36,9 @@
 // main.cpp uses it unqualified ~29 times, so import just that one name rather
 // than the whole namespace.
 using harixos::shellSettings;
+// currentWorkingDirectory moved to the filesystem module so the script engine
+// resolves relative paths against the same value; same single-name import.
+using harixos::currentWorkingDirectory;
 
 namespace {
 
@@ -46,7 +49,6 @@ constexpr uint8_t kDefaultApChannel = 1;
 
 String inputLine;
 bool promptVisible = false;
-String currentWorkingDirectory = "/";
 
 // Simple HTTP file server
 ESP8266WebServer *httpServer = nullptr;

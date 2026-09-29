@@ -1,6 +1,9 @@
 #include "filesystem.h"
 
 namespace harixos {
+
+String currentWorkingDirectory = "/";
+
 namespace {
 
 bool isAbsolute(const String &path) {
