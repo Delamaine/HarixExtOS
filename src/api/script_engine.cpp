@@ -1,4 +1,5 @@
 #include "script_engine.h"
+#include "expr.h"
 #include "gpio_api.h"
 #include "wifi_api.h"
 #include "system_api.h"
@@ -186,6 +187,16 @@ ApiResult ScriptEngine::handlePrintCommand(const String &args, Stream &output) {
   return ApiResult(API_OK, "");
 }
 
+ApiResult ScriptEngine::handleSetCommand(const String &args, Stream &output) {
+  // set <name> = <expression>
+  double value = 0;
+  const char *err = harixos::api::expr::assign(args.c_str(), &value);
+  if (err != nullptr) {
+    return ApiResult(API_INVALID_ARGUMENT, err);
+  }
+  return ApiResult(API_OK, "");  // empty message so executeScript prints no [OK]
+}
+
 ApiResult ScriptEngine::handleRunCommand(const String &args, Stream &output) {
   // run <path>
   String path = args;
@@ -213,6 +224,8 @@ ApiResult ScriptEngine::executeCommand(const String &command, Stream &output) {
   
   if (cmd.name == "print") {
     return handlePrintCommand(cmd.args, output);
+  } else if (cmd.name == "set") {
+    return handleSetCommand(cmd.args, output);
   } else if (cmd.name == "gpio") {
     return handleGpioCommand(cmd.args, output);
   } else if (cmd.name == "wifi") {

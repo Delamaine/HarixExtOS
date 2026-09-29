@@ -107,6 +107,41 @@ void formatDouble(double v, char *buf, size_t cap) {
   if (strtod(buf, nullptr) != v) snprintf(buf, cap, "%.17g", v);
 }
 
+// Single implementation behind both the bool parseSet() and assign(), so
+// each error message exists exactly once. Returns nullptr on success.
+const char *parseSetImpl(const char *line, char *nameOut, size_t nameCap,
+                         const char **expressionOut) {
+  static const char kUsage[] = "Usage: set <name> = <expression>";
+  if (line == nullptr || nameOut == nullptr || nameCap == 0 ||
+      expressionOut == nullptr) {
+    return kUsage;
+  }
+
+  const char *p = line;
+  while (*p == ' ' || *p == '\t') ++p;
+
+  const char *eq = strchr(p, '=');
+  if (eq == nullptr) return kUsage;
+
+  const char *nameStart = p;
+  const char *nameEnd = eq;
+  while (nameEnd > nameStart && (nameEnd[-1] == ' ' || nameEnd[-1] == '\t')) --nameEnd;
+  const size_t nameLen = (size_t)(nameEnd - nameStart);
+  if (nameLen == 0) return kUsage;
+  if (nameLen + 1 > nameCap) return "Invalid variable name.";
+
+  memcpy(nameOut, nameStart, nameLen);
+  nameOut[nameLen] = '\0';
+  if (!vars::isValidName(nameOut)) return "Invalid variable name.";
+
+  const char *expression = eq + 1;
+  while (*expression == ' ' || *expression == '\t') ++expression;
+  if (*expression == '\0') return kUsage;
+
+  *expressionOut = expression;
+  return nullptr;
+}
+
 }  // namespace
 
 bool evaluateArithmetic(const char *expression, double &out) {
@@ -298,6 +333,30 @@ bool evaluate(const char *expression, double &out) {
   char buf[kMaxExpandedLength + 1];
   if (!expand(expression, buf, sizeof(buf), s_resolver)) return false;
   return evaluateArithmetic(buf, out);
+}
+
+bool parseSet(const char *line, char *nameOut, size_t nameCap,
+              const char **expressionOut) {
+  return parseSetImpl(line, nameOut, nameCap, expressionOut) == nullptr;
+}
+
+const char *assign(const char *argsAfterSet, double *valueOut) {
+  char name[vars::kMaxNameLength + 1];
+  const char *expression = nullptr;
+
+  // 1. Parse first: on failure nothing has been touched.
+  const char *msg = parseSetImpl(argsAfterSet, name, sizeof(name), &expression);
+  if (msg != nullptr) return msg;
+
+  // 2. Evaluate next: an invalid expression must not clobber the old value.
+  double v = 0;
+  if (!evaluate(expression, v)) return "Invalid expression.";
+
+  // 3. Store only after 1 and 2 both succeeded.
+  if (!vars::set(name, v)) return "Too many variables.";
+
+  if (valueOut != nullptr) *valueOut = v;
+  return nullptr;
 }
 
 }  // namespace expr

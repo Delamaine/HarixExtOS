@@ -26,6 +26,7 @@
 #include "utils/http/http_downloader.h"
 #include "api/app_manager.h"
 #include "api/expr.h"
+#include "api/vars.h"
 #include "api/value_tokens.h"
 #include "api/script_engine.h"
 #include "kernel/scheduler/scheduler.h"
@@ -699,11 +700,34 @@ void handleCalc(const String &line) {
   }
 
   double res = 0;
-  if (!harixos::api::expr::evaluateArithmetic(expr.c_str(), res) || isnan(res)) {
+  if (!harixos::api::expr::evaluate(expr.c_str(), res) || isnan(res)) {
     Serial.println(F("Invalid expression."));
     return;
   }
   Serial.printf("= %.10g\n", res);
+}
+
+void handleSet(const String &line) {
+  // Strip the leading `set`, then hand everything else to expr::assign —
+  // the same single implementation the script dispatcher uses.
+  String args = line;
+  args.trim();
+  if (args.length() >= 4 && args.substring(0, 4).equalsIgnoreCase("set")) {
+    args = args.substring(4);
+  }
+
+  double value = 0;
+  const char *err = harixos::api::expr::assign(args.c_str(), &value);
+  if (err != nullptr) {
+    Serial.println(err);
+    return;
+  }
+
+  char name[harixos::api::vars::kMaxNameLength + 1];
+  const char *expression = nullptr;
+  if (harixos::api::expr::parseSet(args.c_str(), name, sizeof(name), &expression)) {
+    Serial.printf("%s = %.10g\n", name, value);
+  }
 }
 
 void handleWifiScan() {
@@ -1714,6 +1738,7 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  settings ...         View or change shell settings"));
     Serial.println(F("  run ...              Install/list/run/uninstall .hx apps"));
     Serial.println(F("  calc <expr>          Evaluate arithmetic expressions"));
+  Serial.println(F("  set <name> = <expr>  Store a variable for $name in scripts"));
     Serial.println(F("  serve ...            HTTP file server tools"));
     Serial.println();
     Serial.println(F("Help topics:"));
@@ -1865,6 +1890,8 @@ void executeCommand(const String &line) {
     handleFs(cmd);
   } else if (command == F("calc")) {
     handleCalc(line);
+  } else if (command == F("set")) {
+    handleSet(line);
   } else if (command == F("i2c")) {
     handleI2c(cmd);
   } else if (command == F("cls") || command == F("clear")) {

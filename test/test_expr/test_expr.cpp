@@ -1,4 +1,4 @@
-#include <unity.h>
+﻿#include <unity.h>
 
 #include <cmath>
 #include <cstdio>
@@ -7,9 +7,11 @@
 #include "api/expr.h"
 #include "api/vars.h"
 
+using harixos::api::expr::assign;
 using harixos::api::expr::evaluateArithmetic;
 using harixos::api::expr::evaluate;
 using harixos::api::expr::expand;
+using harixos::api::expr::parseSet;
 using harixos::api::expr::setResolver;
 using harixos::api::vars::clear;
 using harixos::api::vars::set;
@@ -252,6 +254,86 @@ static void test_repeated_variable_in_one_expression(void) {
   TEST_ASSERT_EQUAL_DOUBLE(6, v);
 }
 
+static void test_parse_set_spaced(void) {
+  char name[32];
+  const char *expression = nullptr;
+  TEST_ASSERT_TRUE(parseSet(" x = 1+2", name, sizeof(name), &expression));
+  TEST_ASSERT_EQUAL_STRING("x", name);
+  TEST_ASSERT_EQUAL_STRING("1+2", expression);
+}
+
+static void test_parse_set_unspaced(void) {
+  char name[32];
+  const char *expression = nullptr;
+  TEST_ASSERT_TRUE(parseSet("x=1+2", name, sizeof(name), &expression));
+  TEST_ASSERT_EQUAL_STRING("x", name);
+  TEST_ASSERT_EQUAL_STRING("1+2", expression);
+}
+
+static void test_parse_set_missing_equals(void) {
+  char name[32];
+  const char *expression = nullptr;
+  TEST_ASSERT_FALSE(parseSet(" x 1+2", name, sizeof(name), &expression));
+}
+
+static void test_parse_set_missing_expression(void) {
+  char name[32];
+  const char *expression = nullptr;
+  TEST_ASSERT_FALSE(parseSet(" x = ", name, sizeof(name), &expression));
+}
+
+static void test_parse_set_invalid_name(void) {
+  char name[32];
+  const char *expression = nullptr;
+  TEST_ASSERT_FALSE(parseSet(" 1x = 1", name, sizeof(name), &expression));
+}
+
+static void test_parse_set_empty_name(void) {
+  char name[32];
+  const char *expression = nullptr;
+  TEST_ASSERT_FALSE(parseSet(" = 1", name, sizeof(name), &expression));
+}
+
+static void test_parse_set_expression_may_contain_spaces(void) {
+  char name[32];
+  const char *expression = nullptr;
+  TEST_ASSERT_TRUE(parseSet(" x = readpin 2 + 1", name, sizeof(name), &expression));
+  TEST_ASSERT_EQUAL_STRING("x", name);
+  TEST_ASSERT_EQUAL_STRING("readpin 2 + 1", expression);
+}
+
+static void test_assign_success_stores_and_reports_value(void) {
+  double v = 0;
+  TEST_ASSERT_NULL(assign("x = 1 + 2", &v));
+  TEST_ASSERT_EQUAL_DOUBLE(3, v);
+  double v2 = 0;
+  TEST_ASSERT_TRUE(harixos::api::vars::get("x", v2));
+  TEST_ASSERT_EQUAL_DOUBLE(3, v2);
+}
+
+static void test_assign_leaves_variable_untouched_on_error(void) {
+  TEST_ASSERT_TRUE(set("x", 5));
+  double v = 0;
+  TEST_ASSERT_NOT_NULL(assign("x = $nope", &v));
+  double v2 = 0;
+  TEST_ASSERT_TRUE(harixos::api::vars::get("x", v2));
+  TEST_ASSERT_EQUAL_DOUBLE(5, v2);
+}
+
+static void test_assign_rejects_invalid_name_without_storing(void) {
+  const size_t before = harixos::api::vars::count();
+  double v = 0;
+  TEST_ASSERT_NOT_NULL(assign("1bad = 1", &v));
+  TEST_ASSERT_EQUAL_INT((int)before, (int)harixos::api::vars::count());
+}
+
+static void test_assign_rejects_missing_equals(void) {
+  const size_t before = harixos::api::vars::count();
+  double v = 0;
+  TEST_ASSERT_NOT_NULL(assign(" x 1+2", &v));
+  TEST_ASSERT_EQUAL_INT((int)before, (int)harixos::api::vars::count());
+}
+
 int main(int argc, char **argv) {
   UNITY_BEGIN();
   RUN_TEST(test_precedence_multiply_over_add);
@@ -287,5 +369,16 @@ int main(int argc, char **argv) {
   RUN_TEST(test_evaluate_combines_expand_and_arithmetic);
   RUN_TEST(test_evaluate_fails_when_resolver_absent);
   RUN_TEST(test_repeated_variable_in_one_expression);
+  RUN_TEST(test_parse_set_spaced);
+  RUN_TEST(test_parse_set_unspaced);
+  RUN_TEST(test_parse_set_missing_equals);
+  RUN_TEST(test_parse_set_missing_expression);
+  RUN_TEST(test_parse_set_invalid_name);
+  RUN_TEST(test_parse_set_empty_name);
+  RUN_TEST(test_parse_set_expression_may_contain_spaces);
+  RUN_TEST(test_assign_success_stores_and_reports_value);
+  RUN_TEST(test_assign_leaves_variable_untouched_on_error);
+  RUN_TEST(test_assign_rejects_invalid_name_without_storing);
+  RUN_TEST(test_assign_rejects_missing_equals);
   return UNITY_END();
 }
