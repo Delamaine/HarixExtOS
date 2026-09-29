@@ -47,11 +47,17 @@ static void assertError(const char *expression, const char *expectedMessage,
                         int expectedBadField) {
   Spec spec;
   memset(&spec, 0xAA, sizeof(spec));
+  Spec pristine;
+  memcpy(&pristine, &spec, sizeof(spec));
   int bad = -99;
   const char *err = parse(expression, spec, &bad);
   TEST_ASSERT_NOT_NULL(err);
   TEST_ASSERT_EQUAL_STRING(expectedMessage, err);
   TEST_ASSERT_EQUAL_INT(expectedBadField, bad);
+  // A rejected parse must leave `out` byte-for-byte untouched rather than
+  // half-populated: the caller keeps using the old spec when an add fails.
+  TEST_ASSERT_EQUAL_UINT8_ARRAY((const uint8_t *)&pristine,
+                                (const uint8_t *)&spec, sizeof(Spec));
 }
 
 static void test_parse_all_stars(void) {
@@ -363,6 +369,35 @@ static void test_make_line_round_trips(void) {
   TEST_ASSERT_EQUAL_INT(a.dowRestricted, b.dowRestricted);
 }
 
+// spec 9.1 boundary values - the extreme of every range must parse.
+static void test_parse_boundary_lowest(void) {
+  Spec s;
+  int bad = -99;
+  TEST_ASSERT_NULL(parse("0 0 * * * *", s, &bad));
+  TEST_ASSERT_EQUAL_INT(-1, bad);
+  assertMask(s.sec, bitsOf({0}));
+  assertMask(s.minute, bitsOf({0}));
+  assertMask(s.hour, rangeBits(0, 23));
+  assertMask(s.dom, rangeBits(1, 31));
+  assertMask(s.month, rangeBits(1, 12));
+  assertMask(s.dow, rangeBits(0, 6));
+  TEST_ASSERT_FALSE(s.domRestricted);
+  TEST_ASSERT_FALSE(s.dowRestricted);
+}
+
+static void test_parse_boundary_highest(void) {
+  Spec s;
+  TEST_ASSERT_NULL(parse("59 59 23 31 12 6", s, nullptr));
+  assertMask(s.sec, bitsOf({59}));
+  assertMask(s.minute, bitsOf({59}));
+  assertMask(s.hour, bitsOf({23}));
+  assertMask(s.dom, bitsOf({31}));
+  assertMask(s.month, bitsOf({12}));
+  assertMask(s.dow, bitsOf({6}));
+  TEST_ASSERT_TRUE(s.domRestricted);
+  TEST_ASSERT_TRUE(s.dowRestricted);
+}
+
 int main(int argc, char **argv) {
   (void)argc;
   (void)argv;
@@ -408,5 +443,7 @@ int main(int argc, char **argv) {
   RUN_TEST(test_split_line_five_fields);
   RUN_TEST(test_split_line_extra_internal_whitespace);
   RUN_TEST(test_make_line_round_trips);
+  RUN_TEST(test_parse_boundary_lowest);
+  RUN_TEST(test_parse_boundary_highest);
   return UNITY_END();
 }
