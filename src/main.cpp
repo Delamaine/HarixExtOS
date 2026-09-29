@@ -1741,7 +1741,7 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  settings ...         View or change shell settings"));
     Serial.println(F("  run ...              Install/list/run/uninstall .hx apps"));
     Serial.println(F("  calc <expr>          Evaluate arithmetic expressions"));
-  Serial.println(F("  set <name> = <expr>  Store a variable for $name in scripts"));
+    Serial.println(F("  set <name> = <expr>  Store a variable for $name in scripts"));
     Serial.println(F("  serve ...            HTTP file server tools"));
     Serial.println();
     Serial.println(F("Help topics:"));

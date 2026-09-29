@@ -11,12 +11,12 @@ constexpr size_t kMaxExpandedLength = 256;
 // Pure arithmetic evaluation. No variable expansion, no Arduino headers.
 bool evaluateArithmetic(const char *expression, double &out);
 
-// Substitution of $name / value tokens. Implemented in Task 5.
+// Substitution of $name / value tokens.
 bool expand(const char *expression, char *out, size_t outCapacity,
             bool (*resolve)(const char *token, size_t tokenLen, double &out));
 void setResolver(bool (*resolve)(const char *token, size_t tokenLen, double &out));
 
-// expand() followed by evaluateArithmetic(). Implemented in Task 5.
+// expand() followed by evaluateArithmetic().
 bool evaluate(const char *expression, double &out);
 
 // Parse " <name> = <expression>". `line` points at the text after the

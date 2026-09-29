@@ -33,7 +33,7 @@ private:
   static ApiResult handleDelayCommand(const String &args, Stream &output);
   static ApiResult handleSystemCommand(const String &args, Stream &output);
   static ApiResult handlePrintCommand(const String &args, Stream &output);
-static ApiResult handleSetCommand(const String &args, Stream &output);
+  static ApiResult handleSetCommand(const String &args, Stream &output);
   static ApiResult handleRunCommand(const String &args, Stream &output);
   
   // Tokenize a line into parts
