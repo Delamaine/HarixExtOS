@@ -9,7 +9,50 @@ Core shell commands
 - `update check` — Check for system updates via GitHub
 - `pull <url> <path>` — Download file from the internet (HTTP/HTTPS)
 - `time` — Show time and NTP sync options
-- `schedule` — Manage background tasks (CRON-like)
+- `schedule` — Manage background tasks with 6-field cron
+
+```
+schedule list
+schedule add <sec> <min> <hour> <dom> <month> <dow> <command>
+schedule remove <id>
+```
+
+  Field order and ranges: `sec` 0-59, `min` 0-59, `hour` 0-23, `dom` 1-31,
+  `month` 1-12 (numbers only, no `JAN`/`FEB`), `dow` 0-6 with **0 = Sunday**
+  (no `7`). Seconds first is a HarixOS extension over standard 5-field cron.
+
+  Each field accepts `*`, `n`, `a-b`, `*/n`, `a-b/n`, and comma lists such
+  as `1,3,5`. `*/n` starts at the field's minimum (0 for sec/min/hour/dow,
+  1 for dom/month), ranges never wrap (`5-1` is rejected), and `n <= 0` is
+  rejected. There is no `@reboot`; the six fields above are the only
+  accepted form.
+
+  **`dom` and `dow` are AND-ed when both are restricted — this differs from
+  Linux cron, which ORs them.** `0 0 9 15 * 1` runs only when the 15th is
+  also a Monday. A `*` in a field restricts nothing.
+
+  Examples:
+
+```
+schedule add */5 * * * * heap
+schedule add 0 30 14 * * * settings save
+schedule add 0 0 9 15 * 1 ping
+```
+
+  The command is everything after the six fields and may contain spaces, so
+  no quoting is needed. It runs through the same dispatcher as a `.hx`
+  script; see `SCRIPT-REFERENCE.md` for the keywords available to it.
+
+  Valid system time is required (`time`, `time sync`). Before NTP has
+  synced the scheduler prints `no valid system time, cron not running`
+  once and fires nothing.
+
+  Tasks auto-save to `/harixos/schedule.cfg` on every add and remove and
+  reload at boot — there is no `schedule save`. Ids are reassigned `1..N`
+  in file order when loading, so an unchanged file reproduces the same ids
+  after a reboot. A malformed line is skipped with a warning rather than
+  aborting the load.
+
 
 Filesystem (`fs`) commands
 - `pwd` — Print current working directory

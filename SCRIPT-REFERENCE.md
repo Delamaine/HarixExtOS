@@ -1,5 +1,20 @@
 # HarixOS v1.0 .hx Script Quick Reference
 
+## Keywords available to scripts and scheduled commands
+
+`.hx` scripts and `schedule add` share one command dispatcher, so every
+keyword below works identically in both. This is the set added for
+scripting and scheduling (21 in total):
+
+**System values:** `heap`, `uptime`, `chip`, `info`, `adc`, `calc`
+**Filesystem:** `pwd`, `cd`, `ls`, `mkdir`, `touch`, `rm`, `cp`, `mv`,
+`cat`, `write`, `append`
+**Settings and time:** `settings`, `time`, `reboot`
+**Variables:** `set`
+
+Deliberately not available to either: `serve`, `i2c`, `notepad`,
+`update`, `pull` (spec §8).
+
 ## New Commands
 
 ### About Command
@@ -241,12 +256,50 @@ time list-tz               # Show timezone examples
 ```
 
 ### Task Scheduler
+
+6-field cron — `sec min hour dom month dow`. Seconds are the first field,
+which standard 5-field cron does not have. Valid system time is required.
+
 ```bash
-schedule list              # List active tasks
-schedule remove <id>       # Delete task
-schedule add 14:30:00 'gpio 2 toggle' # Daily task
-schedule add +30s 'reboot' # One-off delayed task
+schedule list                          # List active tasks
+schedule remove <id>                   # Delete task
+schedule add */5 * * * * * heap        # Every 5 seconds
+schedule add 0 30 14 * * * settings save   # Daily at 14:30:00
+schedule add 0 0 9 15 * 1 ping         # 09:00:00 on the 15th AND a Monday
 ```
+
+| Field | Range |
+|---|---|
+| sec | 0–59 |
+| min | 0–59 |
+| hour | 0–23 |
+| dom | 1–31 |
+| month | 1–12 (numbers only, no `JAN`/`FEB`) |
+| dow | 0–6, **0 = Sunday** (no `7`) |
+
+Per-field syntax: `*`, `n`, `a-b`, `*/n`, `a-b/n`, and comma lists such as
+`1,3,5`. `*/n` starts at the field's **minimum** (0 for sec/min/hour/dow,
+1 for dom/month), ranges never wrap (`5-1` is rejected), and `n <= 0` is
+rejected. There is no `@reboot`.
+
+**`dom` and `dow` are AND-ed when both are restricted — this differs from
+Linux cron, which ORs them.** `0 0 9 15 * 1` fires only when the 15th is
+also a Monday, not on either condition alone. A `*` in a field restricts
+nothing.
+
+The command is everything after the six fields, so it may contain spaces
+and needs no quoting. It dispatches through the script command set listed
+at the top of this document.
+
+Tasks auto-save to `/harixos/schedule.cfg` on every `add` and `remove` and
+reload at boot; there is no `schedule save` command. Ids are reassigned
+`1..N` in file order when loading, so an unchanged file reproduces the same
+ids after a reboot. A malformed line in that file is skipped with a warning
+and does not abort the load.
+
+Before NTP has synced the scheduler prints
+`no valid system time, cron not running` once per boot and fires nothing.
+
 
 ## Delay Command (Timing)
 
