@@ -82,6 +82,7 @@ print WiFi: Connected
 ```bash
 set x = 5              # x = 5
 set x = $x * 2 + 1     # x = 11
+set count = 0          # define it before reading it back
 set count = $count + 1 # read-modify-write
 ```
 
@@ -102,10 +103,13 @@ at most 16 characters. Up to 16 variables can be stored.
 `$name`.** The two never collide, even when they share a name:
 
 ```bash
-set heap = 5       # stores a variable named "heap"
-print $heap        # 5      — reads the variable
-print heap         # 41984  — reads the real free heap
+set heap = 5       # a variable literally named "heap"
+set h = $heap      # h = 5        — $heap reads the variable
+set b = heap       # b = <free heap> — a bare heap reads the real value
 ```
+
+`print` echoes its argument verbatim and does **not** expand `$name` or value
+tokens. Use `set` or `calc` when you need to see an expanded value.
 
 An undefined `$name` is an **error**, never a silent `0`.
 
@@ -160,14 +164,18 @@ end
   `Block nesting limit exceeded`.
 - Everything between `if` and its matching `else`/`end` is skipped when the
   condition is false — including nested `if` blocks.
-- `#` comments are stripped before keywords are matched, so `# end` does not
-  close a block.
+- Comments must be their own line: a whole-line comment is dropped before
+  keywords are matched, so `# end` does not close a block. A trailing `#`
+  after an `if` or `set` expression is *not* a comment and fails as
+  `Invalid expression.`.
 - An unclosed block is reported as `[ERROR] <n> unclosed if block(s)`.
 
 **Not supported:** `&&`, `||`, `elif`, and loops (`while`, `for`).
 
-`if` / `else` / `end` are **script-only**. They are not shell commands and
-cannot be scheduled — a scheduled `if` reports `Unknown command: if`.
+`if` / `else` / `end` are **script-only**. Typing `if ...` at the shell
+reports `Unknown command: if`. The scheduler dispatches single commands and
+does not echo the result it returns, so a scheduled `if` prints nothing
+beyond the `[Scheduler] Executing` line — it never opens a block.
 
 ## GPIO Command (Hardware Control)
 
