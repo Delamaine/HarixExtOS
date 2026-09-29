@@ -13,6 +13,8 @@ const char kUnsupported[] = "unsupported syntax";
 const char kOutOfRange[] = "value out of range";
 const char kBadStep[] = "step must be >= 1";
 const char kReversed[] = "reversed range";
+const char kMissingCommand[] = "missing command";
+const char kLineTooLong[] = "line too long";
 
 // Inclusive bounds per field. Index is the 0-based field number.
 struct FieldBounds {
@@ -187,6 +189,62 @@ bool matches(const Spec &spec, const struct tm &timeinfo) {
   const bool dowOk =
       !spec.dowRestricted || ((spec.dow >> timeinfo.tm_wday) & 1U) != 0;
   return domOk && dowOk;
+}
+
+const char *splitLine(const char *line, char *cronOut, size_t cronCap,
+                      const char **commandOut) {
+  if (line == nullptr || cronOut == nullptr || cronCap == 0 ||
+      commandOut == nullptr) {
+    return kExpectedSix;
+  }
+
+  const char *p = line;
+  size_t n = 0;
+  int fields = 0;
+
+  while (fields < 6) {
+    while (isSpace(*p)) ++p;
+    if (*p == '\0') return kExpectedSix;  // fewer than six fields
+
+    if (fields > 0) {
+      if (n + 2 > cronCap) return kUnsupported;
+      cronOut[n++] = ' ';
+    }
+
+    const size_t start = n;
+    while (*p != '\0' && !isSpace(*p)) {
+      if (n + 1 >= cronCap) return kUnsupported;
+      cronOut[n++] = *p++;
+    }
+    if (n == start) return kExpectedSix;
+    ++fields;
+  }
+  cronOut[n] = '\0';
+
+  // Everything from here to the end of the line is the command, verbatim.
+  while (isSpace(*p)) ++p;
+  if (*p == '\0') return kMissingCommand;
+  *commandOut = p;
+  return nullptr;
+}
+
+const char *makeLine(const char *expression, const char *command, char *out,
+                     size_t cap) {
+  if (expression == nullptr || command == nullptr || out == nullptr ||
+      cap == 0) {
+    return kLineTooLong;
+  }
+
+  const size_t exprLen = strlen(expression);
+  const size_t cmdLen = strlen(command);
+  if (exprLen + 1 + cmdLen + 2 > cap) return kLineTooLong;  // + ' ', '\n', '\0'
+
+  memcpy(out, expression, exprLen);
+  out[exprLen] = ' ';
+  memcpy(out + exprLen + 1, command, cmdLen);
+  out[exprLen + 1 + cmdLen] = '\n';
+  out[exprLen + 1 + cmdLen + 1] = '\0';
+  return nullptr;
 }
 
 }  // namespace cron

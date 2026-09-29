@@ -2015,6 +2015,7 @@ void setup() {
   harixos::api::expr::setResolver(harixos::api::resolveDeviceValueToken);
 
   shellSettings = harixos::loadSettings();
+  harixos::kernel::systemScheduler.load();
   setenv("TZ", shellSettings.timezone.c_str(), 1);
   tzset();
 

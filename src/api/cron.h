@@ -38,6 +38,25 @@ const char *parse(const char *expression, Spec &out, int *badField);
 // but when both fields are restricted both must hold.
 bool matches(const Spec &spec, const struct tm &timeinfo);
 
+// Budget for one persisted "<expression> <command>\n" line. scheduler.cpp
+// cannot see main.cpp's anonymous-namespace line limit, so the save-format
+// budget lives with the module that defines the format.
+constexpr size_t kMaxSaveLine = 192;
+
+// Splits "<6 cron fields> <command...>" into its two halves.
+// cronOut receives the first six whitespace-separated fields, normalised to
+// single spaces. *commandOut points into `line` at the text after field 6,
+// so the caller must keep `line` alive for as long as it uses the command.
+// Returns nullptr on success, else "expected 6 fields" / "missing command".
+const char *splitLine(const char *line, char *cronOut, size_t cronCap,
+                      const char **commandOut);
+
+// The exact inverse, so the line format has one definition. Writes
+// "<expression> <command>" plus a trailing '\n' as load() expects.
+// Returns nullptr, or "line too long" if it would not fit in cap.
+const char *makeLine(const char *expression, const char *command, char *out,
+                     size_t cap);
+
 }  // namespace cron
 }  // namespace api
 }  // namespace harixos

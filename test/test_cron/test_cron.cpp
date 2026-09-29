@@ -8,8 +8,11 @@
 #include "api/cron.h"
 
 using harixos::api::cron::Spec;
+using harixos::api::cron::kMaxSaveLine;
+using harixos::api::cron::makeLine;
 using harixos::api::cron::matches;
 using harixos::api::cron::parse;
+using harixos::api::cron::splitLine;
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -286,6 +289,80 @@ static void test_and_semantics_rejects_when_only_dom_matches(void) {
   TEST_ASSERT_FALSE(matches(s, clockAt(0, 0, 9, 15, 6, 4)));
 }
 
+static void test_split_line_typical(void) {
+  char cron[64];
+  const char *command = nullptr;
+  TEST_ASSERT_NULL(splitLine("*/5 * * * * * reboot", cron, sizeof(cron), &command));
+  TEST_ASSERT_EQUAL_STRING("*/5 * * * * *", cron);
+  TEST_ASSERT_EQUAL_STRING("reboot", command);
+}
+
+// Review Focus 3: the command owns everything after field 6, so spaces in
+// it have to survive the save/load round trip intact.
+static void test_split_line_keeps_command_spaces(void) {
+  char cron[64];
+  const char *command = nullptr;
+  TEST_ASSERT_NULL(splitLine("0 30 14 * * * settings save now", cron, sizeof(cron), &command));
+  TEST_ASSERT_EQUAL_STRING("0 30 14 * * *", cron);
+  TEST_ASSERT_EQUAL_STRING("settings save now", command);
+}
+
+static void test_split_line_exact_six_fields_no_command(void) {
+  char cron[64];
+  const char *command = nullptr;
+  const char *err = splitLine("* * * * * *", cron, sizeof(cron), &command);
+  TEST_ASSERT_NOT_NULL(err);
+  TEST_ASSERT_EQUAL_STRING("missing command", err);
+}
+
+static void test_split_line_five_fields(void) {
+  char cron[64];
+  const char *command = nullptr;
+  const char *err = splitLine("* * * * *", cron, sizeof(cron), &command);
+  TEST_ASSERT_NOT_NULL(err);
+  TEST_ASSERT_EQUAL_STRING("expected 6 fields", err);
+}
+
+static void test_split_line_extra_internal_whitespace(void) {
+  char cron[64];
+  const char *command = nullptr;
+  // Six cron fields with deliberately irregular runs of spaces between
+  // them; cronOut must come back canonical, as if written by makeLine.
+  TEST_ASSERT_NULL(splitLine("*/5   *  * * *  *   heap", cron, sizeof(cron), &command));
+  TEST_ASSERT_EQUAL_STRING("*/5 * * * * *", cron);
+  TEST_ASSERT_EQUAL_STRING("heap", command);
+}
+
+// spec 9.1 round trip - the exact seam a reboot crosses.
+static void test_make_line_round_trips(void) {
+  char saved[kMaxSaveLine];
+  TEST_ASSERT_NULL(makeLine("*/5 * * * * *", "settings save now", saved, sizeof(saved)));
+  TEST_ASSERT_EQUAL_STRING("*/5 * * * * * settings save now\n", saved);
+
+  // load() splits the file on '\n' before handing a line to splitLine, so
+  // drop the terminator here exactly as load() does.
+  saved[strlen(saved) - 1] = '\0';
+
+  char cron[64];
+  const char *command = nullptr;
+  TEST_ASSERT_NULL(splitLine(saved, cron, sizeof(cron), &command));
+  TEST_ASSERT_EQUAL_STRING("*/5 * * * * *", cron);
+  TEST_ASSERT_EQUAL_STRING("settings save now", command);
+
+  Spec a;
+  Spec b;
+  TEST_ASSERT_NULL(parse(cron, a, nullptr));
+  TEST_ASSERT_NULL(parse("*/5 * * * * *", b, nullptr));
+  assertMask(a.sec, b.sec);
+  assertMask(a.minute, b.minute);
+  assertMask(a.hour, b.hour);
+  assertMask(a.dom, b.dom);
+  assertMask(a.month, b.month);
+  assertMask(a.dow, b.dow);
+  TEST_ASSERT_EQUAL_INT(a.domRestricted, b.domRestricted);
+  TEST_ASSERT_EQUAL_INT(a.dowRestricted, b.dowRestricted);
+}
+
 int main(int argc, char **argv) {
   (void)argc;
   (void)argv;
@@ -325,5 +402,11 @@ int main(int argc, char **argv) {
   RUN_TEST(test_and_semantics_when_both_restricted);
   RUN_TEST(test_and_semantics_rejects_when_only_dow_matches);
   RUN_TEST(test_and_semantics_rejects_when_only_dom_matches);
+  RUN_TEST(test_split_line_typical);
+  RUN_TEST(test_split_line_keeps_command_spaces);
+  RUN_TEST(test_split_line_exact_six_fields_no_command);
+  RUN_TEST(test_split_line_five_fields);
+  RUN_TEST(test_split_line_extra_internal_whitespace);
+  RUN_TEST(test_make_line_round_trips);
   return UNITY_END();
 }

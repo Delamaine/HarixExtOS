@@ -5,6 +5,11 @@
 
 namespace harixos {
 namespace kernel {
+namespace {
+
+const char kSchedulePath[] = "/harixos/schedule.cfg";
+
+} // namespace
 
 Scheduler systemScheduler;
 
@@ -82,6 +87,83 @@ void Scheduler::update() {
       Serial.print(F("\r\nHarixOS> "));
     }
   }
+}
+
+bool Scheduler::save() {
+  char scratch[api::cron::kMaxSaveLine];
+  String content;
+
+  for (int i = 0; i < taskCount; ++i) {
+    if (api::cron::makeLine(tasks[i].expression.c_str(),
+                            tasks[i].command.c_str(), scratch,
+                            sizeof(scratch)) != nullptr) {
+      return false;
+    }
+    content += scratch;
+  }
+
+  return harixos::writeText(kSchedulePath, content, false);
+}
+
+bool Scheduler::load() {
+  if (!harixos::exists(kSchedulePath)) {
+    return true;
+  }
+
+  String content = harixos::readText(kSchedulePath);
+  const int len = content.length();
+  int start = 0;
+
+  while (start <= len) {
+    int end = start;
+    while (end < len && content[end] != '\n') {
+      ++end;
+    }
+
+    String raw = content.substring(start, end);
+    start = end + 1;
+    raw.trim();
+    if (raw.length() == 0) {
+      continue;
+    }
+
+    char lineBuf[api::cron::kMaxSaveLine];
+    raw.toCharArray(lineBuf, sizeof(lineBuf));
+
+    char cronBuf[64];
+    const char *command = nullptr;
+    const char *err =
+        api::cron::splitLine(lineBuf, cronBuf, sizeof(cronBuf), &command);
+
+    api::cron::Spec spec;
+    if (err == nullptr) {
+      err = api::cron::parse(cronBuf, spec, nullptr);
+    }
+    if (err != nullptr) {
+      // A bad line costs one task, never the whole file.
+      Serial.printf("[Scheduler] skipping bad schedule.cfg line: %s\r\n",
+                    lineBuf);
+      continue;
+    }
+
+    if (taskCount >= MAX_TASKS) {
+      Serial.printf("[Scheduler] schedule.cfg holds more than %d tasks; "
+                    "ignoring the rest.\r\n",
+                    MAX_TASKS);
+      break;
+    }
+
+    tasks[taskCount].id = nextId++;
+    tasks[taskCount].spec = spec;
+    tasks[taskCount].expression = cronBuf;
+    tasks[taskCount].command = command;
+    taskCount++;
+  }
+
+  // Ids are assigned 1..N in file order, so a reboot with an unchanged file
+  // reproduces exactly the ids spec 7.5 requires to survive a power cycle.
+  nextId = taskCount + 1;
+  return true;
 }
 
 } // namespace kernel
