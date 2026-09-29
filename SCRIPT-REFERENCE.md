@@ -75,6 +75,100 @@ print GPIO value: 1
 print WiFi: Connected
 ```
 
+## Variables and Expressions
+
+### `set` — store a value
+
+```bash
+set x = 5              # x = 5
+set x = $x * 2 + 1     # x = 11
+set count = $count + 1 # read-modify-write
+```
+
+The whole expression is evaluated **before** the value is stored, so
+`$count` on the right still reads the previous value. A malformed form
+(missing `=`, invalid name, bad expression) reports an error and leaves
+the variable untouched.
+
+The same `set` works at the shell and inside a `.hx` script. In a script
+it prints nothing; at the shell it prints `<name> = <value>`.
+
+Names start with a letter or `_`, contain letters, digits and `_`, and are
+at most 16 characters. Up to 16 variables can be stored.
+
+### `$name` versus bare value tokens
+
+**A bare word is always a value token; a variable is always referenced as
+`$name`.** The two never collide, even when they share a name:
+
+```bash
+set heap = 5       # stores a variable named "heap"
+print $heap        # 5      — reads the variable
+print heap         # 41984  — reads the real free heap
+```
+
+An undefined `$name` is an **error**, never a silent `0`.
+
+### Value tokens
+
+| Token | Value |
+|---|---|
+| `heap` | free heap in bytes |
+| `adc` | analog read of A0 |
+| `readpin <n>` | `digitalRead(n)` |
+| `uptime` | seconds since boot |
+| `millis` | milliseconds since boot |
+| `time` | epoch seconds |
+
+```bash
+set level = readpin 2
+set stamp = time
+```
+
+`readpin` with a missing or non-numeric argument is an error.
+
+### Expressions
+
+Standard arithmetic with parentheses, `+ - * /`, unary minus, and
+comparisons `< > <= >= == !=` (which bind loosest of all):
+
+```bash
+calc 1 + 2 * 3       # 7
+calc (1 + 2) * 3     # 9
+calc 2 * -3          # -6
+calc $x <= 10        # 1 or 0
+calc heap            # expands the value token first
+```
+
+`calc` and `set` both expand `$name` and value tokens before evaluating.
+Division by zero reports `Invalid expression.`.
+
+## Control Flow (`if` / `else` / `end`)
+
+```bash
+set level = readpin 2
+if $level == 1
+  print LED is on
+else
+  print LED is off
+end
+```
+
+- A condition is true when it evaluates to a non-zero number.
+- `else` is optional.
+- Nesting is capped at **8 levels**; a ninth `if` reports
+  `Block nesting limit exceeded`.
+- Everything between `if` and its matching `else`/`end` is skipped when the
+  condition is false — including nested `if` blocks.
+- `#` comments are stripped before keywords are matched, so `# end` does not
+  close a block.
+- An unclosed block is reported as `[ERROR] <n> unclosed if block(s)`.
+
+**Not supported:** `&&`, `||`, `elif`, and loops (`while`, `for`).
+
+`if` / `else` / `end` are **script-only**. They are not shell commands and
+cannot be scheduled — a scheduled `if` reports `Unknown command: if`.
+
 ## GPIO Command (Hardware Control)
 
 ### Set Pin State
