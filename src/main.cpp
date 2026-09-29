@@ -1838,7 +1838,7 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("Examples:"));
     Serial.println(F("  schedule add */5 * * * * * heap"));
     Serial.println(F("  schedule add 0 30 14 * * * settings save"));
-    Serial.println(F("  schedule add 0 0 9 * * 1 ping"));
+    Serial.println(F("  schedule add 0 0 9 15 * 1 ping"));
   } else if (topic == F("update")) {
     Serial.println(F("Update commands:"));
     Serial.println(F("  update check         Check for system updates via GitHub"));

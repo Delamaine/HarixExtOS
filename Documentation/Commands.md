@@ -34,7 +34,7 @@ schedule remove <id>
   Examples:
 
 ```
-schedule add */5 * * * * heap
+schedule add */5 * * * * * heap
 schedule add 0 30 14 * * * settings save
 schedule add 0 0 9 15 * 1 ping
 ```

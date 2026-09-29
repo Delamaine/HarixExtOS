@@ -18,6 +18,9 @@ namespace api {
 //   if count > 5
 //     print done
 //   end
+// The full keyword list - including heap, uptime, adc, calc, pwd, cd, ls,
+// cat, write, settings, time - is printed by `help` run inside a script or a
+// scheduled command; see ScriptEngine::printHelp.
 
 class ScriptEngine {
 public:
