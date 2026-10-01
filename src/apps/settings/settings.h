@@ -6,10 +6,12 @@ namespace harixos {
 
 struct AppSettings {
   bool bannerEnabled = true;
-  String timezone = "UTC0";
+  String timezone = "UTC";
   String wifiSSID = "";
   String wifiPassword = "";
   bool autoUpdateCheck = true;
+  String powerProfile = "balanced";
+  int cpufreq = 80;
 };
 
 AppSettings loadSettings();

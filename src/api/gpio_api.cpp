@@ -103,6 +103,12 @@ ApiResult GpioAPI::pulse(uint8_t pin, int count, int delayMs) {
   return ApiResult(API_OK, "GPIO" + String(pin) + " pulsed " + String(count) + " times");
 }
 
+bool GpioAPI::isPwmPin(uint8_t pin) {
+  // ESP8266 ledc supports PWM on all GPIO except GPIO6-11 (flash) and GPIO1/3 (UART)
+  // GPIO0, 2, 4, 5, 12, 13, 14, 15 all support PWM
+  return isAvailablePin(pin);
+}
+
 void GpioAPI::listAvailablePins(Stream &output) {
   uint32_t flashSize = ESP.getFlashChipRealSize();
   bool isEsp01 = (flashSize == 1048576);

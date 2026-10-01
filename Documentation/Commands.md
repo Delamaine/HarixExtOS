@@ -90,6 +90,38 @@ Hardware
 - `gpio write <pin> <on|off|toggle|0|1>` — Set GPIO output
 - `i2c scan` — Scan for I2C devices
 
+Hardware
+- Servo control:
+
+```
+servo attach <pin>
+servo detach <pin>
+servo write <pin> <angle>
+servo read <pin>
+servo list
+```
+
+- Ultrasonic sensor:
+
+```
+sensor init <trigger> <echo>
+sensor ping [trigger] [echo]
+sensor read [echo]
+sensor list
+```
+
+- DC motor (L293D H-bridge):
+
+```
+motor init [m1|m2] [name_pin] [speed_pin]
+motor forward [m1|m2]
+motor reverse [m1|m2]
+motor stop [m1|m2]
+motor brake [m1|m2]
+motor speed <0-100> [m1|m2]
+motor list
+```
+
 Examples
 - Create and edit a file:
 
@@ -105,4 +137,45 @@ notepad todo.txt
 ls /
 pwd
 cat /harixos/settings.cfg
+```
+
+- Servo sweep script:
+
+```
+servo attach 4
+servo write 4 0
+delay 500
+servo write 4 90
+delay 500
+servo write 4 180
+delay 500
+servo write 4 90
+delay 500
+servo read 4
+servo detach 4
+```
+
+- Ultrasonic sensor reading:
+
+```
+sensor init 4 5
+sensor ping
+sensor read 5
+sensor list
+```
+
+- Motor control script:
+
+```
+motor init m1
+motor forward m1
+motor speed 75 m1
+delay 2000
+motor stop m1
+motor init m2
+motor reverse m2
+motor speed 50 m2
+delay 2000
+motor brake m2
+motor list
 ```

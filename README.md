@@ -41,6 +41,9 @@ Currently, HarixOS officially supports the **ESP8266** family. However, the arch
 ---
 
 - **Hardware control system** with GPIO management (`gpio ...`) including safe pin handling  
+- **Servo motor control** (`servo ...`) for precise angle positioning  
+- **Ultrasonic sensor interface** (`sensor ...`) for distance measurement  
+- **DC motor control** (`motor ...`) with L293D H-bridge support  
 - **WiFi management system** for scanning, connecting, and network configuration (`wifi ...`)  
 - **I2C bus tools** for peripheral communication and sensor integration  
 
@@ -75,6 +78,9 @@ HarixOS uses a **controlled API layer** that apps interact with instead of raw h
 │ WiFi API              │
 │ System API            │
 │ File System API       │
+│ Servo API             │
+│ Sensor API            │
+│ Motor API             │
 └──────────┬──────────────┘
            │
 ┌──────────▼──────────────┐

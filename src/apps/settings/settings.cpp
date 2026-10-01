@@ -67,6 +67,26 @@ AppSettings loadSettings() {
     }
   }
 
+  int ppPos = content.indexOf("powerprofile=");
+  if (ppPos >= 0) {
+    int endLine = content.indexOf('\n', ppPos);
+    String ppVal = endLine == -1 ? content.substring(ppPos + 13) : content.substring(ppPos + 13, endLine);
+    ppVal.trim();
+    if (ppVal.length() > 0) {
+      settings.powerProfile = ppVal;
+    }
+  }
+
+  int cfPos = content.indexOf("cpufreq=");
+  if (cfPos >= 0) {
+    int endLine = content.indexOf('\n', cfPos);
+    String cfVal = endLine == -1 ? content.substring(cfPos + 8) : content.substring(cfPos + 8, endLine);
+    cfVal.trim();
+    if (cfVal.length() > 0) {
+      settings.cpufreq = cfVal.toInt();
+    }
+  }
+
   return settings;
 }
 
@@ -76,6 +96,8 @@ bool saveSettings(const AppSettings &settings) {
   content += String("wifiSSID=") + settings.wifiSSID + "\n";
   content += String("wifiPassword=") + settings.wifiPassword + "\n";
   content += String("auto_update=") + (settings.autoUpdateCheck ? "on" : "off") + "\n";
+  content += String("powerprofile=") + settings.powerProfile + "\n";
+  content += String("cpufreq=") + String(settings.cpufreq) + "\n";
   bool ok = writeText(kSettingsPath, content, false);
   if (ok) {
     Serial.println(F("System settings saved successfully."));
@@ -89,6 +111,8 @@ void printSettings(const AppSettings &settings, Print &out) {
   out.printf("  Timezone: %s\r\n", settings.timezone.c_str());
   out.printf("  WiFi SSID: %s\r\n", settings.wifiSSID.length() > 0 ? settings.wifiSSID.c_str() : "(not set)");
   out.printf("  Auto Update Check: %s\n", settings.autoUpdateCheck ? "ON" : "OFF");
+  out.printf("  Power Profile: %s\r\n", settings.powerProfile.c_str());
+  out.printf("  CPU Freq: %d MHz\r\n", settings.cpufreq);
   out.printf("  Config file: %s\n", kSettingsPath);
 }
 

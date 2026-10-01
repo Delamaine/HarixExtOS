@@ -101,6 +101,43 @@ void runNotepad(const String &path) {
           Serial.println(F("Unsaved changes discarded."));
         }
         return;
+      } else if (command.startsWith(F("d"))) {
+        String arg = command.substring(1);
+        arg.trim();
+        if (arg.length() == 0) {
+          Serial.println(F("Usage: :d <line_number>"));
+        } else {
+          int lineNum = arg.toInt();
+          if (lineNum <= 0) {
+            Serial.println(F("Invalid line number."));
+          } else {
+            int idx = 0;
+            int currentLine = 0;
+            int startIdx = 0;
+            while (idx < (int)buffer.length() && currentLine < lineNum) {
+              if (buffer[idx] == '\n') {
+                currentLine++;
+                if (currentLine == lineNum) {
+                  startIdx = idx + 1;
+                  break;
+                }
+              }
+              idx++;
+            }
+            if (currentLine < lineNum) {
+              Serial.printf("Line %d out of range (buffer has %d lines).\r\n", lineNum, currentLine + 1);
+            } else {
+              int endIdx = buffer.indexOf('\n', startIdx);
+              if (endIdx == -1) {
+                buffer = buffer.substring(0, startIdx - 1);
+              } else {
+                buffer = buffer.substring(0, startIdx) + buffer.substring(endIdx + 1);
+              }
+              dirty = true;
+              Serial.printf("Line %d deleted.\r\n", lineNum);
+            }
+          }
+        }
       } else {
         Serial.println(F("Unknown editor command. Type :help."));
       }

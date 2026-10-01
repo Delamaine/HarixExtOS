@@ -28,9 +28,14 @@
 #include "api/expr.h"
 #include "api/vars.h"
 #include "api/value_tokens.h"
+#include "api/tz_mapping.h"
 #include "api/script_engine.h"
 #include "kernel/scheduler/scheduler.h"
 #include "kernel/cpu_handler/cpu_handler.h"
+#include "api/power.h"
+#include "api/sensor.h"
+#include "api/servo.h"
+#include "api/motor.h"
 
 // shellSettings now lives in the settings module so wifi_api.cpp can reach it;
 // main.cpp uses it unqualified ~29 times, so import just that one name rather
@@ -659,15 +664,17 @@ void handleSettings(const TokenizedLine &cmd) {
     }
   } else if (action == F("timezone") || action == F("tz")) {
     if (cmd.count < 3) {
-      Serial.println(F("Usage: settings timezone <tz_string>"));
-      Serial.println(F("Example: settings timezone UTC0 or PKT-5"));
+      Serial.println(F("Usage: settings timezone <region>"));
+      Serial.println(F("Example: settings timezone Pacific/Auckland or UTC or PKT-5"));
       return;
     }
-    shellSettings.timezone = cmd.tokens[2];
-    setenv("TZ", shellSettings.timezone.c_str(), 1);
+    String tzVal = cmd.tokens[2];
+    shellSettings.timezone = tzVal;
+    const char* posixStr = harixos::api::tz::toPosix(tzVal.c_str());
+    setenv("TZ", posixStr, 1);
     tzset();
     if (harixos::saveSettings(shellSettings)) {
-      Serial.println(F("Settings saved. Timezone updated."));
+      Serial.printf("Settings saved. Timezone updated to: %s (%s)\r\n", tzVal.c_str(), posixStr);
     } else {
       Serial.println(F("Failed to save settings."));
     }
@@ -801,8 +808,9 @@ void handleWifiConnect(const TokenizedLine &cmd) {
     Serial.println(F("WiFi credentials saved. Auto-connect enabled."));
 
     printWifiStatus();
-    // Sync time via NTP now that we have internet
-    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+    // Sync time via NTP now that we have internet. Use the TZ-aware overload
+    // so newlib's DST rules stay intact (the int offset overload wipes them).
+    configTime(harixos::api::tz::toPosix(shellSettings.timezone.c_str()), "pool.ntp.org", "time.nist.gov");
   } else {
     Serial.printf("Connection failed: %s\r\n", wifiStatusToString(WiFi.status()).c_str());
   }
@@ -1527,7 +1535,7 @@ void tryAutoWifi() {
 
     if (WiFi.status() == WL_CONNECTED) {
       Serial.println(F("Auto-connected to WiFi."));
-      configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+      configTime(harixos::api::tz::toPosix(shellSettings.timezone.c_str()), "pool.ntp.org", "time.nist.gov");
     } else {
       Serial.println(F("Auto-connect failed."));
     }
@@ -1568,42 +1576,63 @@ void handleTime(const TokenizedLine &cmd) {
     struct tm *timeinfo = localtime(&now);
     char buf[64];
     strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", timeinfo);
-    Serial.printf("Current Time: %s\r\n", buf);
+    const char* posixStr = harixos::api::tz::toPosix(shellSettings.timezone.c_str());
+    Serial.printf("Current Time: %s (Timezone: %s -> %s)\r\n", buf, shellSettings.timezone.c_str(), posixStr);
     return;
   }
   
   String action = toLowerCopy(cmd.tokens[1]);
   if (action == F("sync")) {
     if (cmd.count >= 3) {
-      shellSettings.timezone = cmd.tokens[2];
+      String tzVal = cmd.tokens[2];
+      shellSettings.timezone = tzVal;
       harixos::saveSettings(shellSettings);
-      setenv("TZ", shellSettings.timezone.c_str(), 1);
+      const char* posixStr = harixos::api::tz::toPosix(tzVal.c_str());
+      setenv("TZ", posixStr, 1);
       tzset();
-      Serial.printf("Timezone updated to: %s\r\n", shellSettings.timezone.c_str());
+      Serial.printf("Timezone updated to: %s (%s)\r\n", tzVal.c_str(), posixStr);
     }
 
     if (WiFi.status() == WL_CONNECTED) {
       Serial.println(F("Syncing time via NTP..."));
-      configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+      const char* posixStr = harixos::api::tz::toPosix(shellSettings.timezone.c_str());
+      configTime(posixStr, "pool.ntp.org", "time.nist.gov");
       delay(500); // Give it a brief moment
       Serial.println(F("NTP sync requested. Check 'time' in a few seconds."));
     } else {
       Serial.println(F("Cannot sync time. WiFi is not connected."));
     }
   } else if (action == F("list-tz") || action == F("timezones")) {
-    Serial.println(F("Common POSIX Timezones:"));
-    Serial.println(F("  UTC:   UTC0"));
-    Serial.println(F("  UK:    GMT0BST,M3.5.0/1,M10.5.0"));
-    Serial.println(F("  CET:   CET-1CEST,M3.5.0,M10.5.0/3"));
-    Serial.println(F("  EET:   EET-2EEST,M3.5.0/3,M10.5.0/4"));
-    Serial.println(F("  EST:   EST5EDT,M3.2.0,M11.1.0"));
-    Serial.println(F("  CST:   CST6CDT,M3.2.0,M11.1.0"));
-    Serial.println(F("  MST:   MST7MDT,M3.2.0,M11.1.0"));
-    Serial.println(F("  PST:   PST8PDT,M3.2.0,M11.1.0"));
-    Serial.println(F("  India: IST-5:30"));
-    Serial.println(F("  Japan: JST-9"));
-    Serial.println(F("  AEST:  AEST-10AEDT,M10.1.0,M4.1.0/3"));
-    Serial.println(F("For others, search online for 'POSIX TZ strings'"));
+    Serial.println(F("Common Timezone Regions:"));
+    Serial.println(F("  Americas:"));
+    Serial.println(F("    America/New_York  UTC-5  US Eastern"));
+    Serial.println(F("    America/Chicago   UTC-6  US Central"));
+    Serial.println(F("    America/Denver    UTC-7  US Mountain"));
+    Serial.println(F("    America/Los_Angeles UTC-8 US Pacific"));
+    Serial.println(F("    America/Sao_Paulo UTC-3  Brazil"));
+    Serial.println(F("  Europe:"));
+    Serial.println(F("    Europe/London     UTC+0  UK / Western European"));
+    Serial.println(F("    Europe/Paris      UTC+1  Central European"));
+    Serial.println(F("    Europe/Moscow     UTC+4  Russia Moscow"));
+    Serial.println(F("    Europe/Athens     UTC+2  Eastern European"));
+    Serial.println(F("  Africa:"));
+    Serial.println(F("    Africa/Johannesburg UTC+2 South Africa"));
+    Serial.println(F("    Africa/Lagos      UTC+1  West Africa"));
+    Serial.println(F("    Africa/Nairobi    UTC+3  East Africa"));
+    Serial.println(F("  Asia:"));
+    Serial.println(F("    Asia/Dubai        UTC+4  UAE"));
+    Serial.println(F("    Asia/Kolkata      UTC+5:30 India"));
+    Serial.println(F("    Asia/Bangkok      UTC+7  SE Asia"));
+    Serial.println(F("    Asia/Shanghai     UTC+8  China"));
+    Serial.println(F("    Asia/Tokyo        UTC+9  Japan"));
+    Serial.println(F("    Asia/Seoul        UTC+9  Korea"));
+    Serial.println(F("  Oceania:"));
+    Serial.println(F("    Australia/Sydney  UTC+10 Australian Eastern"));
+    Serial.println(F("    Pacific/Auckland  UTC+12 New Zealand"));
+    Serial.println(F("    Pacific/Honolulu  UTC-10 Hawaii"));
+    Serial.println(F("  Other:"));
+    Serial.println(F("    UTC               UTC+0  Coordinated Universal Time"));
+    Serial.println(F("  DST is handled automatically. Use 'settings timezone <region>' to set."));
   } else if (action == F("set")) {
     if (cmd.count < 4) {
       Serial.println(F("Usage: time set <HH:MM:SS> <YYYY-MM-DD>"));
@@ -1748,23 +1777,33 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  cat <path>           Print file contents"));
     Serial.println(F("  write <path> <txt>   Replace file contents"));
     Serial.println(F("  append <path> <txt>  Append to file"));
-    Serial.println(F("  fs ...               Filesystem (LittleFS) tools"));
+    Serial.println(F("  fs ...               Filesystem (LittleFS) tools (fs show|format|df|stats)"));
     Serial.println();
     Serial.println(F("Hardware & networking:"));
-    Serial.println(F("  gpio ...             GPIO control and listing"));
-    Serial.println(F("  wifi ...             WiFi connection and scanning"));
-    Serial.println(F("  i2c ...              I2C bus tools"));
+    Serial.println(F("  gpio ...             GPIO control and listing (gpio list|mode|read|write|pulse)"));
+    Serial.println(F("  wifi ...             WiFi connection and scanning (wifi status|scan|connect|disconnect|ap|mode|ip|mac)"));
+    Serial.println(F("  i2c ...              I2C bus tools (i2c begin|scan)"));
     Serial.println();
     Serial.println(F("Applications:"));
     Serial.println(F("  notepad <path>       Open text editor"));
-    Serial.println(F("  settings ...         View or change shell settings"));
-    Serial.println(F("  run ...              Install/list/run/uninstall .hx apps"));
+    Serial.println(F("  settings show        Show current settings"));
+    Serial.println(F("  settings banner on|off  Toggle startup banner"));
+    Serial.println(F("  settings timezone <region>  Set timezone (e.g. Pacific/Auckland, UTC, PKT-5)"));
+    Serial.println(F("  settings update on|off  Toggle auto-update check"));
+    Serial.println(F("  settings save        Save settings to flash"));
+    Serial.println(F("  settings reload      Reload settings from flash"));
+    Serial.println(F("  powerprofile ...     Manage power profile (powerprofile [full|balanced|powersave|minimal|off] | set <profile> | apply | status)"));
+    Serial.println(F("  cpufreq ...          Manage CPU frequency (cpufreq [40|80] | set <freq> | status)"));
+    Serial.println(F("  sensor ...           HC-SR04 ultrasonic sensor (sensor init|ping|read|list)"));
+    Serial.println(F("  servo ...            SG90 servo motor (servo attach|detach|write|read|list)"));
+    Serial.println(F("  motor ...            L293D motor shield (motor init|forward|reverse|stop|brake|speed|list)"));
+    Serial.println(F("  run ...              Install/list/run/uninstall .hx apps (run install|list|run|uninstall)"));
     Serial.println(F("  calc <expr>          Evaluate arithmetic expressions"));
     Serial.println(F("  set <name> = <expr>  Store a variable for $name in scripts"));
-    Serial.println(F("  serve ...            HTTP file server tools"));
+    Serial.println(F("  serve ...            HTTP file server tools (serve start|stop|status|serve <file> [port])"));
     Serial.println();
     Serial.println(F("Help topics:"));
-    Serial.println(F("  help wifi|gpio|fs|serve|time|schedule|update  Show topic help"));
+    Serial.println(F("  help wifi|gpio|fs|serve|time|schedule|update|sensor|servo  Show topic help"));
     return;
   }
 
@@ -1815,14 +1854,15 @@ void handleHelp(const TokenizedLine &cmd) {
   } else if (topic == F("time")) {
     Serial.println(F("Time commands:"));
     Serial.println(F("  time                     Show current time"));
-    Serial.println(F("  time sync [timezone]     Sync NTP & optionally set timezone"));
+    Serial.println(F("  time sync [region]       Sync NTP & optionally set timezone (IANA or POSIX)"));
     Serial.println(F("  time set <HH:MM:SS> <YYYY-MM-DD> Set time manually"));
-    Serial.println(F("  time list-tz             Show common timezone codes"));
+    Serial.println(F("  time list-tz             Show common timezone regions"));
     Serial.println();
     Serial.println(F("Timezones:"));
-    Serial.println(F("  Set via: settings timezone <POSIX_TZ_STRING>"));
-    Serial.println(F("       or: time sync <POSIX_TZ_STRING>"));
-    Serial.println(F("  Use 'time list-tz' for examples like IST-5:30"));
+    Serial.println(F("  Set via: settings timezone <IANA_REGION>   (e.g. Pacific/Auckland, UTC)"));
+    Serial.println(F("       or: time sync <IANA_REGION>          (auto-offset from mapping)"));
+    Serial.println(F("  POSIX strings still work (e.g. PKT-5, GMT0BST,M3.5.0/M10.5.0)"));
+    Serial.println(F("  DST is handled automatically by the system"));
   } else if (topic == F("schedule")) {
     Serial.println(F("Scheduler commands (6-field cron: sec min hour dom month dow):"));
     Serial.println(F("  schedule list                     List all tasks"));
@@ -1845,10 +1885,46 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println();
     Serial.println(F("Example:"));
     Serial.println(F("  update check"));
+  } else if (topic == F("sensor")) {
+    Serial.println(F("Sensor commands (HC-SR04 ultrasonic):"));
+    Serial.println(F("  sensor init <trigger> <echo>    Initialize sensor on given pins"));
+    Serial.println(F("  sensor ping [trigger] [echo]     Take a distance reading (defaults: trigger=4, echo=5)"));
+    Serial.println(F("  sensor read [echo]               Read last measured distance (default echo=5)"));
+    Serial.println(F("  sensor list                      List all initialized sensors"));
+    Serial.println();
+    Serial.println(F("Distance output: mm, cm, and meters"));
+    Serial.println(F("Object detection: reports 'yes' or 'no'"));
+  } else if (topic == F("servo")) {
+    Serial.println(F("Servo commands (SG90 PWM on ESP8266):"));
+    Serial.println(F("  servo attach <pin>       Attach servo to GPIO pin"));
+    Serial.println(F("  servo detach <pin>       Detach servo from GPIO pin"));
+    Serial.println(F("  servo write <pin> <angle>  Set angle (0-180 degrees)"));
+    Serial.println(F("  servo read <pin>         Read current angle"));
+    Serial.println(F("  servo list               List all attached servos"));
+    Serial.println();
+    Serial.println(F("Uses ESP8266 native PWM (ledc). Auto-attaches on write if not attached."));
+  } else if (topic == F("motor")) {
+    Serial.println(F("Motor commands (L293D Motor Shield):"));
+    Serial.println(F("  motor init [m1|m2]       Initialize motor (M1: D5/D6, M2: D7/D1)"));
+    Serial.println(F("  motor forward [m1|m2]    Run motor forward"));
+    Serial.println(F("  motor reverse [m1|m2]    Run motor reverse"));
+    Serial.println(F("  motor stop [m1|m2]       Stop motor"));
+    Serial.println(F("  motor brake [m1|m2]      Brake motor"));
+    Serial.println(F("  motor speed <0-100> [m1|m2]  Set speed percentage"));
+    Serial.println(F("  motor list               List all motors"));
+    Serial.println();
+    Serial.println(F("Controls 2 DC motors via PWM + GPIO direction pins."));
+    Serial.println(F("Speed: 0-100% PWM duty cycle. Direction: forward/reverse."));
   } else {
     Serial.println(F("Unknown help topic."));
   }
 }
+
+void handlePowerProfile(const String &line);
+void handleCpuFreq(const String &line);
+void handleSensor(const String &line);
+void handleServo(const String &line);
+void handleMotor(const String &line);
 
 void executeCommand(const String &line) {
   TokenizedLine cmd = tokenize(line);
@@ -1930,6 +2006,19 @@ void executeCommand(const String &line) {
     handleSchedule(line);
   } else if (command == F("update")) {
     handleUpdate(cmd);
+  } else if (command == F("powerprofile")) {
+    handlePowerProfile(line);
+  } else if (command == F("cpufreq")) {
+    handleCpuFreq(line);
+  } else if (command == F("sensor")) {
+    String tail = line.substring(6);
+    handleSensor(tail);
+  } else if (command == F("servo")) {
+    String tail = line.substring(5);
+    handleServo(tail);
+  } else if (command == F("motor")) {
+    String tail = line.substring(5);
+    handleMotor(tail);
   } else {
     Serial.printf("Unknown command: %s\r\n", cmd.tokens[0].c_str());
     Serial.println(F("Type help for the command list."));
@@ -1939,8 +2028,12 @@ void executeCommand(const String &line) {
 
 
 void handleSerialInput() {
+  static unsigned long lastCharTime = 0;
+  const unsigned long serialDebounceMs = 50;
+
   while (Serial.available() > 0) {
     char c = static_cast<char>(Serial.read());
+    lastCharTime = millis();
 
     if (c == '\r' || c == '\n') {
       if (inputLine.length() > 0) {
@@ -2019,6 +2112,443 @@ void handleFs(const TokenizedLine &cmd) {
   }
 }
 
+void handlePowerProfile(const String &line) {
+  String rest = line;
+  rest.trim();
+  if (rest.equalsIgnoreCase("powerprofile")) {
+    rest = "";
+  } else if (rest.startsWith("powerprofile")) {
+    rest = rest.substring(12);
+    rest.trim();
+  }
+  if (rest.length() == 0) {
+    Serial.printf("Power profile: %s\r\nUsage: powerprofile <full|balanced|powersave|minimal|off>\r\n", shellSettings.powerProfile.c_str());
+    return;
+  }
+
+  int sep = rest.indexOf(' ');
+  String action = sep < 0 ? rest : rest.substring(0, sep);
+  String tail = sep < 0 ? String("") : rest.substring(sep + 1);
+  tail.trim();
+
+  if (action.equalsIgnoreCase("set") || action.equalsIgnoreCase("")) {
+    if (tail.length() == 0) {
+      Serial.printf("Current profile: %s\r\nUsage: powerprofile set <full|balanced|powersave|minimal|off>\r\n", shellSettings.powerProfile.c_str());
+      return;
+    }
+    harixos::api::PowerProfile profile = harixos::api::stringToPowerProfile(tail);
+    shellSettings.powerProfile = harixos::api::powerProfileToString(profile);
+    harixos::api::applyPowerProfile(profile);
+    harixos::api::setCpuFrequency(harixos::api::stringToCpuFreq(String(shellSettings.cpufreq)));
+    harixos::saveSettings(shellSettings);
+    Serial.printf("Power profile set to %s.\r\n", shellSettings.powerProfile.c_str());
+  } else if (action.equalsIgnoreCase("apply")) {
+    harixos::api::PowerProfile profile = harixos::api::stringToPowerProfile(shellSettings.powerProfile);
+    harixos::api::applyPowerProfile(profile);
+    harixos::api::setCpuFrequency(harixos::api::stringToCpuFreq(String(shellSettings.cpufreq)));
+    Serial.printf("Power profile applied (%s).\r\n", shellSettings.powerProfile.c_str());
+  } else if (action.equalsIgnoreCase("status")) {
+    Serial.printf("Power profile: %s\r\n", shellSettings.powerProfile.c_str());
+    Serial.printf("CPU Freq: %d MHz\r\n", shellSettings.cpufreq);
+  } else {
+    harixos::api::PowerProfile profile = harixos::api::stringToPowerProfile(action);
+    shellSettings.powerProfile = harixos::api::powerProfileToString(profile);
+    harixos::api::applyPowerProfile(profile);
+    harixos::api::setCpuFrequency(harixos::api::stringToCpuFreq(String(shellSettings.cpufreq)));
+    harixos::saveSettings(shellSettings);
+    Serial.printf("Power profile set to %s.\r\n", shellSettings.powerProfile.c_str());
+  }
+}
+
+void handleCpuFreq(const String &line) {
+  String rest = line;
+  rest.trim();
+  if (rest.equalsIgnoreCase("cpufreq")) {
+    rest = "";
+  } else if (rest.startsWith("cpufreq")) {
+    rest = rest.substring(8);
+    rest.trim();
+  }
+  if (rest.length() == 0) {
+    Serial.printf("CPU frequency: %d MHz\r\nUsage: cpufreq <40|80>\r\n", shellSettings.cpufreq);
+    return;
+  }
+
+  int sep = rest.indexOf(' ');
+  String action = sep < 0 ? rest : rest.substring(0, sep);
+  String tail = sep < 0 ? String("") : rest.substring(sep + 1);
+  tail.trim();
+
+  int freq = -1;
+  if (action.equalsIgnoreCase("set") || action.equalsIgnoreCase("")) {
+    if (tail.length() == 0) {
+      Serial.printf("Current freq: %d MHz\r\nUsage: cpufreq set <40|80>\r\n", shellSettings.cpufreq);
+      return;
+    }
+    freq = tail.toInt();
+  } else if (action.equalsIgnoreCase("status")) {
+    Serial.printf("CPU frequency: %d MHz\r\n", shellSettings.cpufreq);
+    return;
+  } else {
+    freq = (tail.length() > 0 ? tail : action).toInt();
+  }
+  if (freq != 40 && freq != 80) {
+    Serial.println(F("Invalid frequency. Use 40 or 80."));
+    return;
+  }
+  if (!harixos::api::setCpuFrequency(harixos::api::stringToCpuFreq(String(freq)))) {
+    Serial.println(F("Error: 40 MHz is not supported by the ESP8266 SDK. CPU frequency unchanged."));
+    return;
+  }
+  shellSettings.cpufreq = freq;
+  harixos::saveSettings(shellSettings);
+  Serial.printf("CPU frequency set to %d MHz.\r\n", freq);
+}
+
+void handleSensor(const String &line) {
+  String rest = line;
+  rest.trim();
+  if (rest.length() == 0) {
+    Serial.println(F("Usage: sensor ping [trigger] [echo] | sensor read [echo] | sensor init <trigger> <echo> | sensor list"));
+    return;
+  }
+
+  int sep = rest.indexOf(' ');
+  String action = sep < 0 ? rest : rest.substring(0, sep);
+  String tail = sep < 0 ? String("") : rest.substring(sep + 1);
+  tail.trim();
+
+  if (action.equalsIgnoreCase("init")) {
+    if (tail.length() == 0) {
+      Serial.println(F("Usage: sensor init <trigger_pin> <echo_pin>"));
+      return;
+    }
+    int sep2 = tail.indexOf(' ');
+    String pinStr = (sep2 < 0) ? tail : tail.substring(0, sep2);
+    uint8_t trigger = pinStr.toInt();
+    if (sep2 >= 0) {
+      tail = tail.substring(sep2 + 1);
+      tail.trim();
+      uint8_t echo = tail.toInt();
+      int result = harixos::api::SensorAPI::init(trigger, echo);
+      if (result >= 0) {
+        Serial.printf("Sensor initialized: trigger=%d, echo=%d (instance %d)\r\n", trigger, echo, result);
+      } else {
+        Serial.println(F("Sensor pool full."));
+      }
+    } else {
+      Serial.println(F("Usage: sensor init <trigger_pin> <echo_pin>"));
+    }
+    return;
+  }
+
+  if (action.equalsIgnoreCase("ping")) {
+    uint8_t trigger = 4;
+    uint8_t echo = 5;
+    if (tail.length() > 0) {
+      int sep2 = tail.indexOf(' ');
+      if (sep2 >= 0) {
+        trigger = tail.substring(0, sep2).toInt();
+        tail = tail.substring(sep2 + 1);
+        tail.trim();
+        echo = tail.toInt();
+      } else {
+        trigger = tail.toInt();
+        echo = tail.toInt();
+      }
+    }
+    harixos::api::SensorAPI* sensor = harixos::api::SensorAPI::findByTriggerPin(trigger);
+    if (!sensor) {
+      int result = harixos::api::SensorAPI::init(trigger, echo);
+      if (result >= 0) {
+        sensor = harixos::api::SensorAPI::findByTriggerPin(trigger);
+      }
+    }
+    if (sensor) {
+      int mm = sensor->readDistanceMm();
+      if (mm > 0) {
+        Serial.printf("Distance: %d mm (%.2f cm, %.3f m)\r\n", mm, sensor->readDistanceCm(), sensor->readDistanceM());
+      } else {
+        Serial.println(F("No object detected or timeout."));
+      }
+    } else {
+      Serial.println(F("Sensor not found. Initialize with: sensor init <trigger> <echo>"));
+    }
+    return;
+  }
+
+  if (action.equalsIgnoreCase("read")) {
+    uint8_t echoPin = 5;
+    if (tail.length() > 0) {
+      echoPin = tail.toInt();
+    }
+    harixos::api::SensorAPI* sensor = harixos::api::SensorAPI::findByEchoPin(echoPin);
+    if (sensor) {
+      int mm = sensor->readDistanceMm();
+      if (mm > 0) {
+        Serial.printf("Distance: %d mm\r\n", mm);
+        Serial.printf("Object detected: %s\r\n", sensor->hasObject() ? "yes" : "no");
+      } else {
+        Serial.println(F("No object detected or timeout."));
+      }
+    } else {
+      Serial.println(F("Sensor not found."));
+    }
+    return;
+  }
+
+  if (action.equalsIgnoreCase("list")) {
+    harixos::api::SensorAPI::listAll(Serial);
+    return;
+  }
+
+  Serial.println(F("Unknown sensor action. Use: ping, read, init, list"));
+}
+
+void handleServo(const String &line) {
+  String rest = line;
+  rest.trim();
+  if (rest.length() == 0) {
+    Serial.println(F("Usage: servo write <pin> <angle> | servo attach <pin> | servo detach <pin> | servo read <pin> | servo list"));
+    return;
+  }
+
+  int sep = rest.indexOf(' ');
+  String action = sep < 0 ? rest : rest.substring(0, sep);
+  String tail = sep < 0 ? String("") : rest.substring(sep + 1);
+  tail.trim();
+
+  if (action.equalsIgnoreCase("attach")) {
+    if (tail.length() == 0) {
+      Serial.println(F("Usage: servo attach <pin>"));
+      return;
+    }
+    uint8_t pin = tail.toInt();
+    int result = harixos::api::ServoAPI::attach(pin);
+    if (result >= 0) {
+      Serial.printf("Servo attached to GPIO%d (instance %d)\r\n", pin, result);
+    } else {
+      Serial.println(F("Servo pool full."));
+    }
+    return;
+  }
+
+  if (action.equalsIgnoreCase("detach")) {
+    if (tail.length() == 0) {
+      Serial.println(F("Usage: servo detach <pin>"));
+      return;
+    }
+    uint8_t pin = tail.toInt();
+    int result = harixos::api::ServoAPI::detach(pin);
+    if (result >= 0) {
+      Serial.printf("Servo detached from GPIO%d\r\n", pin);
+    } else {
+      Serial.println(F("Servo not found."));
+    }
+    return;
+  }
+
+  if (action.equalsIgnoreCase("write")) {
+    if (tail.length() == 0) {
+      Serial.println(F("Usage: servo write <pin> <angle>"));
+      return;
+    }
+    int sep2 = tail.indexOf(' ');
+    uint8_t pin = (sep2 < 0) ? tail.toInt() : tail.substring(0, sep2).toInt();
+    uint8_t angle = (sep2 < 0) ? 90 : tail.substring(sep2 + 1).toInt();
+    if (angle > 180) angle = 180;
+
+    harixos::api::ServoAPI* servo = harixos::api::ServoAPI::findByPin(pin);
+    if (!servo) {
+      int result = harixos::api::ServoAPI::attach(pin);
+      if (result >= 0) {
+        servo = harixos::api::ServoAPI::findByPin(pin);
+      }
+    }
+    if (servo) {
+      servo->writeAngle(angle);
+      Serial.printf("Servo GPIO%d -> %d degrees\r\n", pin, angle);
+    } else {
+      Serial.println(F("Servo not found."));
+    }
+    return;
+  }
+
+  if (action.equalsIgnoreCase("read")) {
+    if (tail.length() == 0) {
+      Serial.println(F("Usage: servo read <pin>"));
+      return;
+    }
+    uint8_t pin = tail.toInt();
+    harixos::api::ServoAPI* servo = harixos::api::ServoAPI::findByPin(pin);
+    if (servo) {
+      Serial.printf("Servo GPIO%d: %d degrees\r\n", pin, servo->readAngle());
+    } else {
+      Serial.println(F("Servo not found."));
+    }
+    return;
+  }
+
+  if (action.equalsIgnoreCase("list")) {
+    harixos::api::ServoAPI::listAll(Serial);
+    return;
+  }
+
+  Serial.println(F("Unknown servo action. Use: attach, detach, write, read, list"));
+}
+
+void handleMotor(const String &line) {
+  String rest = line;
+  rest.trim();
+  if (rest.length() == 0) {
+    Serial.println(F("Usage: motor init|forward|reverse|stop|brake|speed|list"));
+    return;
+  }
+
+  int sep = rest.indexOf(' ');
+  String action = sep < 0 ? rest : rest.substring(0, sep);
+  String tail = sep < 0 ? String("") : rest.substring(sep + 1);
+  tail.trim();
+
+  if (action.equalsIgnoreCase("init")) {
+    if (tail.length() == 0) {
+      Serial.println(F("Usage: motor init [m1|m2] [name_pin] [speed_pin]"));
+      Serial.println(F("  M1: name=GPIO14(D5), speed=GPIO12(D6)"));
+      Serial.println(F("  M2: name=GPIO13(D7), speed=GPIO5(D1)"));
+      return;
+    }
+    String motorName = tail;
+    uint8_t namePin, speedPin;
+
+    if (motorName == F("m1") || motorName == F("0")) {
+      namePin = 14; speedPin = 12;
+    } else if (motorName == F("m2") || motorName == F("1")) {
+      namePin = 13; speedPin = 5;
+    } else {
+      namePin = tail.toInt();
+      sep = tail.indexOf(' ');
+      if (sep >= 0) speedPin = tail.substring(sep + 1).toInt();
+      else speedPin = 12;
+    }
+
+    uint8_t index = (motorName == F("m1") || motorName == F("0")) ? 0 : 1;
+    int result = harixos::api::MotorAPI::init(index, namePin, speedPin);
+    if (result >= 0) {
+      Serial.printf("Motor %s initialized (GPIO%d name, GPIO%d speed)\r\n",
+                    motorName.c_str(), namePin, speedPin);
+    } else {
+      Serial.println(F("Motor pool full."));
+    }
+    return;
+  }
+
+  if (action.equalsIgnoreCase("forward")) {
+    if (tail.length() == 0) {
+      harixos::api::MotorAPI::findByIndex(0)->forward();
+      harixos::api::MotorAPI::findByIndex(1)->forward();
+      Serial.println(F("All motors forward."));
+    } else if (tail == F("m1") || tail == F("0")) {
+      harixos::api::MotorAPI::findByIndex(0)->forward();
+      Serial.println(F("Motor M1 forward."));
+    } else if (tail == F("m2") || tail == F("1")) {
+      harixos::api::MotorAPI::findByIndex(1)->forward();
+      Serial.println(F("Motor M2 forward."));
+    } else {
+      uint8_t idx = tail.toInt();
+      harixos::api::MotorAPI::findByIndex(idx)->forward();
+      Serial.printf("Motor %d forward.\r\n", idx);
+    }
+    return;
+  }
+
+  if (action.equalsIgnoreCase("reverse")) {
+    if (tail.length() == 0) {
+      harixos::api::MotorAPI::findByIndex(0)->reverse();
+      harixos::api::MotorAPI::findByIndex(1)->reverse();
+      Serial.println(F("All motors reverse."));
+    } else if (tail == F("m1") || tail == F("0")) {
+      harixos::api::MotorAPI::findByIndex(0)->reverse();
+      Serial.println(F("Motor M1 reverse."));
+    } else if (tail == F("m2") || tail == F("1")) {
+      harixos::api::MotorAPI::findByIndex(1)->reverse();
+      Serial.println(F("Motor M2 reverse."));
+    } else {
+      uint8_t idx = tail.toInt();
+      harixos::api::MotorAPI::findByIndex(idx)->reverse();
+      Serial.printf("Motor %d reverse.\r\n", idx);
+    }
+    return;
+  }
+
+  if (action.equalsIgnoreCase("stop")) {
+    if (tail.length() == 0) {
+      harixos::api::MotorAPI::findByIndex(0)->stop();
+      harixos::api::MotorAPI::findByIndex(1)->stop();
+      Serial.println(F("All motors stopped."));
+    } else if (tail == F("m1") || tail == F("0")) {
+      harixos::api::MotorAPI::findByIndex(0)->stop();
+      Serial.println(F("Motor M1 stopped."));
+    } else if (tail == F("m2") || tail == F("1")) {
+      harixos::api::MotorAPI::findByIndex(1)->stop();
+      Serial.println(F("Motor M2 stopped."));
+    } else {
+      uint8_t idx = tail.toInt();
+      harixos::api::MotorAPI::findByIndex(idx)->stop();
+      Serial.printf("Motor %d stopped.\r\n", idx);
+    }
+    return;
+  }
+
+  if (action.equalsIgnoreCase("brake") || action.equalsIgnoreCase("brake")) {
+    if (tail.length() == 0) {
+      harixos::api::MotorAPI::findByIndex(0)->brake();
+      harixos::api::MotorAPI::findByIndex(1)->brake();
+      Serial.println(F("All motors braked."));
+    } else if (tail == F("m1") || tail == F("0")) {
+      harixos::api::MotorAPI::findByIndex(0)->brake();
+      Serial.println(F("Motor M1 braked."));
+    } else if (tail == F("m2") || tail == F("1")) {
+      harixos::api::MotorAPI::findByIndex(1)->brake();
+      Serial.println(F("Motor M2 braked."));
+    } else {
+      uint8_t idx = tail.toInt();
+      harixos::api::MotorAPI::findByIndex(idx)->brake();
+      Serial.printf("Motor %d braked.\r\n", idx);
+    }
+    return;
+  }
+
+  if (action.equalsIgnoreCase("speed") || action.equalsIgnoreCase("spd")) {
+    if (tail.length() == 0) {
+      Serial.println(F("Usage: motor speed <0-100> [m1|m2]"));
+      return;
+    }
+    int sep2 = tail.indexOf(' ');
+    uint8_t speed = tail.toInt();
+    String motorName = (sep2 >= 0) ? tail.substring(sep2 + 1) : String("");
+
+    if (motorName == F("m1") || motorName == F("0")) {
+      harixos::api::MotorAPI::findByIndex(0)->setSpeed(speed);
+      Serial.printf("Motor M1 speed: %d%%\r\n", speed);
+    } else if (motorName == F("m2") || motorName == F("1")) {
+      harixos::api::MotorAPI::findByIndex(1)->setSpeed(speed);
+      Serial.printf("Motor M2 speed: %d%%\r\n", speed);
+    } else {
+      harixos::api::MotorAPI::findByIndex(0)->setSpeed(speed);
+      harixos::api::MotorAPI::findByIndex(1)->setSpeed(speed);
+      Serial.printf("All motors speed: %d%%\r\n", speed);
+    }
+    return;
+  }
+
+  if (action.equalsIgnoreCase("list")) {
+    harixos::api::MotorAPI::listAll(Serial);
+    return;
+  }
+
+  Serial.println(F("Unknown motor action. Use: init, forward, reverse, stop, brake, speed, list"));
+}
+
 }  // namespace
 
 
@@ -2060,7 +2590,8 @@ void setup() {
 
   shellSettings = harixos::loadSettings();
   harixos::kernel::systemScheduler.load();
-  setenv("TZ", shellSettings.timezone.c_str(), 1);
+  const char* bootPosix = harixos::api::tz::toPosix(shellSettings.timezone.c_str());
+  setenv("TZ", bootPosix, 1);
   tzset();
 
   if (shellSettings.bannerEnabled) {
@@ -2073,6 +2604,15 @@ void setup() {
   
   tryAutoWifi();
   harixos::kernel::CpuHandler::init();
+  
+  // Apply saved power profile and CPU frequency at boot
+  harixos::api::PowerProfile bootProfile = harixos::api::stringToPowerProfile(shellSettings.powerProfile);
+  harixos::api::applyPowerProfile(bootProfile);
+  if (!harixos::api::setCpuFrequency(harixos::api::stringToCpuFreq(String(shellSettings.cpufreq)))) {
+    Serial.println(F("Warning: 40 MHz is not supported by the ESP8266 SDK. Running at 80 MHz."));
+    shellSettings.cpufreq = 80;
+    harixos::saveSettings(shellSettings);
+  }
 
   // If update check is enabled, check now and show results.
   if (shellSettings.autoUpdateCheck) {
@@ -2096,6 +2636,37 @@ void loop() {
     httpServer->handleClient();
   }
   harixos::kernel::systemScheduler.update();
+  
+  // Auto-switch to lower power when no serial session is connected
+  // Only switch if terminal has been idle for more than 1 minute
+  static bool lastSerialState = true;
+  static unsigned long lastStateChange = 0;
+  const unsigned long idleTimeoutMs = 60000UL;  // 1 minute
+  
+  bool currentSerialState = harixos::api::isSerialConnected();
+  
+  if (currentSerialState != lastSerialState) {
+    lastStateChange = millis();
+    lastSerialState = currentSerialState;
+  } else if ((millis() - lastStateChange >= idleTimeoutMs)) {
+    // Terminal has been stable for more than 1 minute - execute the pending switch
+    if (!currentSerialState) {
+      // Terminal idle - switch to powersave if on balanced/full
+      if (shellSettings.powerProfile.equalsIgnoreCase("balanced") || shellSettings.powerProfile.equalsIgnoreCase("full")) {
+        harixos::api::PowerProfile psProfile = harixos::api::stringToPowerProfile("powersave");
+        harixos::api::applyPowerProfile(psProfile);
+        Serial.println(F("Terminal idle for 1 minute. Switched to powersave."));
+      }
+    } else {
+      // Terminal active for 1 minute - restore saved profile
+      harixos::api::PowerProfile restoredProfile = harixos::api::stringToPowerProfile(shellSettings.powerProfile);
+      harixos::api::applyPowerProfile(restoredProfile);
+      harixos::api::setCpuFrequency(harixos::api::stringToCpuFreq(String(shellSettings.cpufreq)));
+      Serial.printf("Terminal active for 1 minute. Restored profile: %s.\r\n", shellSettings.powerProfile.c_str());
+    }
+    // Reset to prevent repeated switches
+    lastStateChange = millis();
+  }
   
   // Use safe yield to process background tasks and feed WDT
   harixos::kernel::CpuHandler::yieldSafely();

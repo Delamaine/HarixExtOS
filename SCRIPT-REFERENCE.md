@@ -10,6 +10,9 @@ scripting and scheduling (21 in total):
 **Filesystem:** `pwd`, `cd`, `ls`, `mkdir`, `touch`, `rm`, `cp`, `mv`,
 `cat`, `write`, `append`
 **Settings and time:** `settings`, `time`, `reboot`
+**Servo:** `servo attach`, `servo detach`, `servo write`, `servo read`, `servo list`
+**Sensor:** `sensor init`, `sensor ping`, `sensor read`, `sensor list`
+**Motor:** `motor init`, `motor forward`, `motor reverse`, `motor stop`, `motor brake`, `motor speed`, `motor list`
 **Variables:** `set`
 
 Deliberately not available to either: `serve`, `i2c`, `notepad`,
@@ -162,7 +165,7 @@ calc heap            # expands the value token first
 `calc` and `set` both expand `$name` and value tokens before evaluating.
 Division by zero reports `Invalid expression.`.
 
-## Control Flow (`if` / `else` / `end`)
+## Control Flow (`if` / `else` / `while` / `break` / `end`)
 
 ```bash
 set level = readpin 2
@@ -183,14 +186,41 @@ end
   keywords are matched, so `# end` does not close a block. A trailing `#`
   after an `if` or `set` expression is *not* a comment and fails as
   `Invalid expression.`.
-- An unclosed block is reported as `[ERROR] <n> unclosed if block(s)`.
+- An unclosed block is reported as `[ERROR] <n> unclosed block(s)`.
 
-**Not supported:** `&&`, `||`, `elif`, and loops (`while`, `for`).
+**Not supported:** `&&`, `||`, `elif`, and `for`.
 
 `if` / `else` / `end` are **script-only**. Typing `if ...` at the shell
 reports `Unknown command: if`. The scheduler dispatches single commands and
 does not echo the result it returns, so a scheduled `if` prints nothing
 beyond the `[Scheduler] Executing` line — it never opens a block.
+
+### Loops (`while` / `end`, `break`)
+
+```bash
+set i = 3
+while $i > 0
+  calc $i
+  set i = $i - 1
+end
+```
+
+- `while <cond>` starts a loop; its body runs until the condition goes
+  false at a matching `end`. The condition is re-evaluated at each `end`.
+- `break` leaves the **innermost** enclosing `while` immediately: the rest
+  of the body (including any `if`/`else` still open) is skipped to that
+  `while`'s `end`. A `break` outside any loop reports
+  `break outside while loop`.
+- Safety caps: **100,000 iterations** (`while loop iteration limit
+  exceeded`) and **5 minutes** wall time (`while loop time limit
+  exceeded`). The engine feeds the watchdog on each loop pass, so a tight
+  loop ends via these caps rather than a board reset.
+- The script still owns the CPU while looping: the shell, web UI, and
+  scheduler are blocked until the script finishes. Keep bodies short (add
+  `delay` when you don't need the CPU) and prefer scheduled single
+  commands for periodic work.
+- `while`/`break` are **script-only**, like `if`. A single scheduled
+  `while` never opens a block.
 
 ## GPIO Command (Hardware Control)
 
@@ -234,6 +264,78 @@ gpio 13                    # Available
 gpio 14                    # Available
 gpio 15                    # Available (LOW required at boot)
 gpio 16                    # Available
+```
+
+## Servo Command (Servo Motors)
+
+```bash
+servo attach 4             # Attach servo to GPIO4
+servo detach 4             # Detach servo from GPIO4
+servo write 4 90           # Write angle (0-180 degrees)
+servo read 4               # Read current angle
+servo list                 # List all servos
+```
+
+### Example
+```bash
+print Attaching servo...
+servo attach 4
+servo write 4 0
+delay 500
+servo write 4 180
+delay 500
+servo read 4
+servo detach 4
+```
+
+## Sensor Command (Ultrasonic Distance)
+
+```bash
+sensor init 4 5            # Initialize (trigger=4, echo=5)
+sensor ping                # Ping and show distance
+sensor read 5              # Read distance from echo pin 5
+sensor list                # List all sensors
+```
+
+### Example
+```bash
+print Initializing sensor...
+sensor init 4 5
+delay 500
+print Taking measurements...
+sensor ping
+delay 1000
+sensor read 5
+sensor list
+```
+
+## Motor Command (DC Motors - L293D)
+
+```bash
+motor init m1              # Initialize M1 (GPIO14 name, GPIO12 speed)
+motor init m2              # Initialize M2 (GPIO13 name, GPIO5 speed)
+motor forward m1           # Move M1 forward
+motor reverse m2           # Move M2 reverse
+motor stop m1              # Stop M1 (coast)
+motor brake m2             # Brake M2 (stop quickly)
+motor speed 75 m1          # Set M1 speed to 75%
+motor list                 # List all motors
+```
+
+### Example
+```bash
+print Initializing motors...
+motor init m1
+motor init m2
+motor forward m1
+motor speed 75 m1
+delay 2000
+motor stop m1
+motor reverse m2
+motor speed 50 m2
+delay 2000
+motor brake m2
+motor list
 ```
 
 ## WiFi Command (Networking)

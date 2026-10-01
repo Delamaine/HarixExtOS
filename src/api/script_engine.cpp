@@ -5,6 +5,7 @@
 #include "gpio_api.h"
 #include "wifi_api.h"
 #include "system_api.h"
+#include "tz_mapping.h"
 #include "../apps/settings/settings.h"
 #include "../kernel/filesystem/filesystem.h"
 
@@ -454,7 +455,7 @@ ApiResult ScriptEngine::handleSettingsTimeCommand(const String &name,
       if (WiFi.status() != WL_CONNECTED) {
         return ApiResult(API_ERROR, "Cannot sync time. WiFi is not connected.");
       }
-      configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+      configTime(harixos::api::tz::toPosix(harixos::shellSettings.timezone.c_str()), "pool.ntp.org", "time.nist.gov");
       output.println(F("NTP sync requested."));
       return ApiResult(API_OK, "");
     }
@@ -548,32 +549,67 @@ ApiResult ScriptEngine::executeScript(const String &script, Stream &output) {
     if (line.length() > 0 && !line.startsWith("#")) {
       Command cmd = parseCommand(line);
       cmd.name.toLowerCase();
+      int jumpTo = -1;
 
-      if (cmd.name == "if") {
+      if (cmd.name == "if" || cmd.name == "while") {
         bool cond = false;
         if (!blocks.skipping()) {
           double v = 0;
           if (!harixos::api::expr::evaluate(cmd.args.c_str(), v)) {
-            output.printf("[ERROR] if %s: Invalid expression.\r\n", cmd.args.c_str());
+            output.printf("[ERROR] %s %s: Invalid expression.\r\n",
+                          cmd.name.c_str(), cmd.args.c_str());
             ++errorCount;
           } else {
             cond = !isnan(v) && v != 0;
           }
         }
-        const char *err = blocks.onEvent(harixos::api::BlockEvent::If, cond);
+        const char *err =
+            cmd.name == "while"
+                ? blocks.onWhile(startIdx, endIdx + 1, cond, millis())
+                : blocks.onEvent(harixos::api::BlockEvent::If, cond);
         if (err != nullptr) {
           output.printf("[ERROR] %s: %s\r\n", line.c_str(), err);
           ++errorCount;
         }
+      } else if (cmd.name == "break") {
+        if (!blocks.skipping()) {
+          const char *err = blocks.onBreak();
+          if (err != nullptr) {
+            output.printf("[ERROR] %s: %s\r\n", line.c_str(), err);
+            ++errorCount;
+          }
+        }
       } else if (cmd.name == "else" || cmd.name == "end") {
+        bool cond = false;
+        if (cmd.name == "end" && blocks.topIsWhile() && blocks.topRunning()) {
+          // Re-evaluate the while condition by re-extracting its line;
+          // the frame stores offsets, not the condition text.
+          int wStart = blocks.topLineStart();
+          int wEnd = script.indexOf('\n', wStart);
+          if (wEnd < 0) {
+            wEnd = scriptLen;
+          }
+          String wline = script.substring(wStart, wEnd);
+          wline.trim();
+          Command wcmd = parseCommand(wline);
+          double v = 0;
+          if (!harixos::api::expr::evaluate(wcmd.args.c_str(), v)) {
+            output.printf("[ERROR] while %s: Invalid expression.\r\n",
+                          wcmd.args.c_str());
+            ++errorCount;
+          } else {
+            cond = !isnan(v) && v != 0;
+          }
+        }
         const char *err = blocks.onEvent(
             cmd.name == "else" ? harixos::api::BlockEvent::Else
                                : harixos::api::BlockEvent::End,
-            false);
+            cond, millis());
         if (err != nullptr) {
           output.printf("[ERROR] %s: %s\r\n", line.c_str(), err);
           ++errorCount;
         }
+        jumpTo = blocks.lastJumpTarget();
       } else if (!blocks.skipping()) {
         ApiResult result = executeCommand(line, output);
         if (result.isError()) {
@@ -584,13 +620,22 @@ ApiResult ScriptEngine::executeScript(const String &script, Stream &output) {
         }
       }
       ++lineCount;
+      if (jumpTo >= 0) {
+        startIdx = jumpTo;
+        // Feed the soft WDT (and WiFi) each loop pass so a tight while
+        // body reaches the iteration/time caps instead of resetting the
+        // board; the shell/scheduler/web remain blocked until the script
+        // finishes either way.
+        yield();
+        continue;
+      }
     }
     
     startIdx = endIdx + 1;
   }
 
   if (blocks.unclosedCount() > 0) {
-    output.printf("[ERROR] %d unclosed if block(s)\r\n", blocks.unclosedCount());
+    output.printf("[ERROR] %d unclosed block(s)\r\n", blocks.unclosedCount());
     ++errorCount;
   }
   
@@ -657,6 +702,8 @@ void ScriptEngine::printHelp(Stream &output) {
   output.println(F("Other:"));
   output.println(F("  set <name> = <expr>     Assign a variable"));
   output.println(F("  if/else/end             Conditional blocks"));
+  output.println(F("  while <cond>/end        Loop while condition is true"));
+  output.println(F("  break                   Exit innermost while loop"));
   output.println(F("  # comment               Script comment"));
   output.println(F("  help                    Show this help"));
 }

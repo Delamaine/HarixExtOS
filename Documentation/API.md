@@ -140,6 +140,110 @@ SystemAPI::reboot();
 
 ---
 
+## Servo API
+
+```cpp
+#include "api/servo.h"
+using namespace harixos::api;
+
+// Attach servo to a GPIO pin
+int instance = ServoAPI::attach(4);
+
+// Write angle (0-180 degrees)
+ServoAPI::writeAngle(90);
+
+// Read current angle
+uint8_t angle = ServoAPI::readAngle();
+
+// Detach servo
+ServoAPI::detach(4);
+
+// List all servos
+ServoAPI::listAll(Serial);
+```
+
+### Available Pins
+- GPIO4 (D2) — common choice, safe for boot
+- GPIO5 (D1) — also safe
+- Any GPIO can be used
+
+---
+
+## Sensor API (Ultrasonic)
+
+```cpp
+#include "api/sensor.h"
+using namespace harixos::api;
+
+// Initialize sensor with trigger and echo pins
+SensorAPI::init(4, 5);  // trigger=GPIO4, echo=GPIO5
+
+// Read distance in millimeters
+int mm = SensorAPI::readDistanceMm();
+
+// Read distance in centimeters
+float cm = SensorAPI::readDistanceCm();
+
+// Read distance in meters
+float m = SensorAPI::readDistanceM();
+
+// Check if object is within max distance
+bool detected = SensorAPI::hasObject(5000);  // 5m max
+
+// List all sensors
+SensorAPI::listAll(Serial);
+```
+
+### Pin Configuration
+- **Trigger pin**: configured as OUTPUT
+- **Echo pin**: configured as INPUT
+- Default timeout: configurable
+
+---
+
+## Motor API (L293D H-bridge)
+
+```cpp
+#include "api/motor.h"
+using namespace harixos::api;
+
+// Initialize motors
+MotorAPI::init(0, 14, 12);  // M1: name=GPIO14(D5), speed=GPIO12(D6)
+MotorAPI::init(1, 13, 5);   // M2: name=GPIO13(D7), speed=GPIO5(D1)
+
+// Direction control
+MotorAPI::forward();   // All motors forward
+MotorAPI::reverse();   // All motors reverse
+MotorAPI::stop();      // All motors stop (coast)
+MotorAPI::brake();     // All motors brake (stop quickly)
+
+// Speed control (0-100%)
+MotorAPI::setSpeed(75);
+uint8_t speed = MotorAPI::getSpeed();
+
+// Combined speed and direction
+MotorAPI::setSpeedDirection(50, FORWARD);
+
+// Acceleration/deceleration
+MotorAPI::accelerate(100, 1000);  // 0->100% in 1s
+MotorAPI::decelerate(50, 500);    // decelerate to 50% in 0.5s
+
+// Run for specified duration then stop
+MotorAPI::runFor(75, FORWARD, 2000);  // 75% forward for 2 seconds
+
+// List all motors
+MotorAPI::listAll(Serial);
+```
+
+### Motor Configuration
+- **M1**: namePin=GPIO14(D5), speedPin=GPIO12(D6)
+- **M2**: namePin=GPIO13(D7), speedPin=GPIO5(D1)
+- PWM: 5kHz, 8-bit resolution
+- Speed range: 0-100% (PWM duty cycle 0-255)
+- Max 2 motors supported
+
+---
+
 ## .hx Script Format
 
 HarixOS supports `.hx` script files for automation and external app development. Scripts are the primary way applications interact with hardware through the API.
@@ -292,6 +396,84 @@ print Reading GPIO2...
 gpio 2 read
 print
 print GPIO test complete!
+```
+
+**Servo Sweep (servo_sweep.hx):**
+```bash
+print =====================================
+print Servo Sweep Test
+print =====================================
+print
+print Attaching servo to GPIO4...
+servo attach 4
+print
+print Sweeping servo...
+servo write 4 0
+delay 500
+servo write 4 90
+delay 500
+servo write 4 180
+delay 500
+servo write 4 90
+delay 500
+print
+print Current angle:
+servo read 4
+print
+print Detaching servo...
+servo detach 4
+print
+print Servo test complete!
+```
+
+**Ultrasonic Sensor (sensor_test.hx):**
+```bash
+print =====================================
+print Ultrasonic Sensor Test
+print =====================================
+print
+print Initializing sensor (trigger=4, echo=5)...
+sensor init 4 5
+print
+print Taking measurements...
+sensor ping
+delay 1000
+sensor read 5
+delay 1000
+sensor ping
+print
+print Sensor list:
+sensor list
+print
+print Sensor test complete!
+```
+
+**Motor Control (motor_test.hx):**
+```bash
+print =====================================
+print Motor Control Test
+print =====================================
+print
+print Initializing motors...
+motor init m1
+motor init m2
+print
+print Testing M1 forward...
+motor forward m1
+motor speed 75 m1
+delay 2000
+motor stop m1
+print
+print Testing M2 reverse...
+motor reverse m2
+motor speed 50 m2
+delay 2000
+motor brake m2
+print
+print Motor list:
+motor list
+print
+print Motor test complete!
 ```
 
 ---

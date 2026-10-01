@@ -27,6 +27,9 @@ public:
   // Get all available pins for this board
   static void listAvailablePins(Stream &output);
   
+  // Check if pin supports PWM (ledc) on ESP8266
+  static bool isPwmPin(uint8_t pin);
+  
 private:
   // Validate if pin is available on this board
   static bool isAvailablePin(uint8_t pin);
