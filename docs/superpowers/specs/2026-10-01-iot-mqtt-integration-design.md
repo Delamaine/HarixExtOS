@@ -176,6 +176,7 @@ decision).
 
 New: `src/kernel/iot/mqtt_service.{h,cpp}`, `src/kernel/iot/inbound_queue.{h,cpp}`,
 `src/kernel/iot/onchange.{h,cpp}`, `src/kernel/iot/onchange_logic.{h,cpp}`,
+`src/utils/string_stream.h` (header-only capture stream for replies),
 `test/test_inbound_queue/`, `test/test_onchange/`, `Documentation/ha-mqtt.md`.
 
 Modified: `platformio.ini` (lib_deps, build_src_filter), `src/main.cpp`
