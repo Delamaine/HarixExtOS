@@ -1925,6 +1925,7 @@ void handleCpuFreq(const String &line);
 void handleSensor(const String &line);
 void handleServo(const String &line);
 void handleMotor(const String &line);
+void handleVars(const String &line);
 
 void executeCommand(const String &line) {
   TokenizedLine cmd = tokenize(line);
@@ -2019,6 +2020,8 @@ void executeCommand(const String &line) {
   } else if (command == F("motor")) {
     String tail = line.substring(5);
     handleMotor(tail);
+  } else if (command == F("vars")) {
+    handleVars(line);
   } else {
     Serial.printf("Unknown command: %s\r\n", cmd.tokens[0].c_str());
     Serial.println(F("Type help for the command list."));
@@ -2549,8 +2552,104 @@ void handleMotor(const String &line) {
   Serial.println(F("Unknown motor action. Use: init, forward, reverse, stop, brake, speed, list"));
 }
 
-}  // namespace
+void handleVars(const String &line) {
+  String rest = line;
+  rest.trim();
+  if (rest.length() == 0) {
+    Serial.println(F("Usage: vars [list|set|get|del|save|load|clear] [args...]"));
+    return;
+  }
 
+  int sep = rest.indexOf(' ');
+  String action = sep < 0 ? rest : rest.substring(0, sep);
+  String tail = sep < 0 ? String("") : rest.substring(sep + 1);
+  tail.trim();
+
+  if (action.equalsIgnoreCase("list")) {
+    Serial.println(F("Variables:"));
+    harixos::api::vars::listValues([](const char *line) {
+      Serial.println(line);
+    });
+    Serial.printf("Count: %zu/%zu\r\n", harixos::api::vars::count(), harixos::api::vars::kMaxVars);
+    return;
+  }
+
+  if (action.equalsIgnoreCase("set")) {
+    if (tail.length() == 0) {
+      Serial.println(F("Usage: vars set <name>=<value>"));
+      return;
+    }
+    double value = 0;
+    const char *err = harixos::api::expr::assign(tail.c_str(), &value);
+    if (err != nullptr) {
+      Serial.println(err);
+      return;
+    }
+    char name[harixos::api::vars::kMaxNameLength + 1];
+    if (harixos::api::expr::parseSet(tail.c_str(), name, sizeof(name), nullptr)) {
+      harixos::api::vars::set(name, value);
+      Serial.printf("%s = %.10g\r\n", name, value);
+    }
+    return;
+  }
+
+  if (action.equalsIgnoreCase("get")) {
+    if (tail.length() == 0) {
+      Serial.println(F("Usage: vars get <name>"));
+      return;
+    }
+    tail.trim();
+    double value = 0;
+    if (harixos::api::vars::get(tail.c_str(), value)) {
+      Serial.printf("%s = %.10g\r\n", tail.c_str(), value);
+    } else {
+      Serial.printf("%s not found.\r\n", tail.c_str());
+    }
+    return;
+  }
+
+  if (action.equalsIgnoreCase("del") || action.equalsIgnoreCase("delete")) {
+    if (tail.length() == 0) {
+      Serial.println(F("Usage: vars del <name>"));
+      return;
+    }
+    tail.trim();
+    if (harixos::api::vars::delByName(tail.c_str())) {
+      Serial.printf("%s deleted.\r\n", tail.c_str());
+    } else {
+      Serial.printf("%s not found.\r\n", tail.c_str());
+    }
+    return;
+  }
+
+  if (action.equalsIgnoreCase("save")) {
+    if (harixos::api::vars::save(harixos::api::vars::kPersistPath)) {
+      Serial.println(F("Variables saved."));
+    } else {
+      Serial.println(F("Failed to save variables."));
+    }
+    return;
+  }
+
+  if (action.equalsIgnoreCase("load")) {
+    if (harixos::api::vars::load(harixos::api::vars::kPersistPath)) {
+      Serial.printf("Variables loaded (%zu).\r\n", harixos::api::vars::count());
+    } else {
+      Serial.println(F("No variables to load."));
+    }
+    return;
+  }
+
+  if (action.equalsIgnoreCase("clear")) {
+    harixos::api::vars::clear();
+    Serial.println(F("All variables cleared."));
+    return;
+  }
+
+  Serial.println(F("Unknown vars action: list, set, get, del, save, load, clear"));
+}
+
+}  // namespace
 
 extern "C" {
   #include "user_interface.h"
