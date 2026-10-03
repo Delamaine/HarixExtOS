@@ -277,4 +277,54 @@ bool HttpDownloader::downloadFile(const String &url, const String &savePath, Str
   return performDownload(protocol, host, port, path, savePath, output);
 }
 
+api::ApiResult HttpDownloader::post(const String &url, const String &body,
+                                    const String &contentType,
+                                    uint32_t timeoutMs) {
+  if (!isWiFiConnected()) {
+    return api::ApiResult(api::API_ERROR, "WiFi not connected");
+  }
+
+  String protocol, host, path;
+  uint16_t port = 0;
+  if (!parseUrl(url, protocol, host, port, path)) {
+    return api::ApiResult(api::API_ERROR, "Invalid URL");
+  }
+  if (protocol != "http") {
+    return api::ApiResult(api::API_ERROR, "post: plain HTTP only (no TLS)");
+  }
+
+  if (timeoutMs > 65535) timeoutMs = 65535;
+
+  // Same client/HTTPClient structure as the plain GET variant above, but the
+  // request line, Host, Content-Type and Content-Length describe a POST body.
+  // Non-2xx is a normal reply here, not a transport failure.
+  WiFiClient *client = new WiFiClient();
+  client->setTimeout(timeoutMs);
+  HTTPClient *http = new HTTPClient();
+  http->setTimeout(static_cast<uint16_t>(timeoutMs));
+  http->setUserAgent("HarixOS/1.0 (ESP8266)");
+  http->setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+
+  api::ApiResult result(api::API_ERROR, "");
+  if (!http->begin(*client, host, port, path)) {
+    result.message = "HTTP begin failed";
+  } else {
+    http->addHeader("Content-Type", contentType);
+    int code = http->sendRequest("POST", body);
+    if (code <= 0) {
+      String reason = HTTPClient::errorToString(code);
+      if (reason.length() == 0) reason = "request failed (code " + String(code) + ")";
+      result.message = reason;
+    } else {
+      result.status = (code >= 200 && code < 300) ? api::API_OK : api::API_ERROR;
+      result.message = "HTTP " + String(code);
+    }
+    http->end();
+  }
+  delete http;
+  delete client;
+  yield();
+  return result;
+}
+
 } // namespace harixos

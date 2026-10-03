@@ -7,6 +7,13 @@ namespace {
 
 const char *kSettingsPath = "/harixos/settings.cfg";
 
+String resolveMqttPrefix(const String &prefix) {
+  if (prefix.length() > 0) {
+    return prefix;
+  }
+  return String("harixos/") + String(ESP.getChipId(), HEX);
+}
+
 }  // namespace
 
 AppSettings shellSettings;
@@ -14,6 +21,7 @@ AppSettings shellSettings;
 AppSettings loadSettings() {
   AppSettings settings;
   if (!exists(kSettingsPath)) {
+    settings.mqttPrefix = resolveMqttPrefix(settings.mqttPrefix);
     return settings;
   }
 
@@ -87,6 +95,82 @@ AppSettings loadSettings() {
     }
   }
 
+  int mePos = content.indexOf("mqtt_enabled=");
+  if (mePos >= 0) {
+    int endLine = content.indexOf('\n', mePos);
+    String meVal = endLine == -1 ? content.substring(mePos + 13) : content.substring(mePos + 13, endLine);
+    meVal.trim();
+    if (meVal.equalsIgnoreCase("on")) {
+      settings.mqttEnabled = true;
+    } else if (meVal.equalsIgnoreCase("off")) {
+      settings.mqttEnabled = false;
+    }
+  }
+
+  int mhPos = content.indexOf("mqtt_host=");
+  if (mhPos >= 0) {
+    int endLine = content.indexOf('\n', mhPos);
+    settings.mqttHost = endLine == -1 ? content.substring(mhPos + 10) : content.substring(mhPos + 10, endLine);
+    settings.mqttHost.trim();
+  }
+
+  int mpoPos = content.indexOf("mqtt_port=");
+  if (mpoPos >= 0) {
+    int endLine = content.indexOf('\n', mpoPos);
+    String mpoVal = endLine == -1 ? content.substring(mpoPos + 10) : content.substring(mpoPos + 10, endLine);
+    mpoVal.trim();
+    long port = mpoVal.toInt();
+    if (port > 0) {
+      settings.mqttPort = (uint16_t)port;
+    }
+  }
+
+  int muPos = content.indexOf("mqtt_user=");
+  if (muPos >= 0) {
+    int endLine = content.indexOf('\n', muPos);
+    settings.mqttUser = endLine == -1 ? content.substring(muPos + 10) : content.substring(muPos + 10, endLine);
+    settings.mqttUser.trim();
+  }
+
+  int mpasPos = content.indexOf("mqtt_pass=");
+  if (mpasPos >= 0) {
+    int endLine = content.indexOf('\n', mpasPos);
+    settings.mqttPass = endLine == -1 ? content.substring(mpasPos + 10) : content.substring(mpasPos + 10, endLine);
+    settings.mqttPass.trim();
+  }
+
+  int mprePos = content.indexOf("mqtt_prefix=");
+  if (mprePos >= 0) {
+    int endLine = content.indexOf('\n', mprePos);
+    settings.mqttPrefix = endLine == -1 ? content.substring(mprePos + 12) : content.substring(mprePos + 12, endLine);
+    settings.mqttPrefix.trim();
+  }
+
+  int miPos = content.indexOf("mqtt_interval=");
+  if (miPos >= 0) {
+    int endLine = content.indexOf('\n', miPos);
+    String miVal = endLine == -1 ? content.substring(miPos + 14) : content.substring(miPos + 14, endLine);
+    miVal.trim();
+    long interval = miVal.toInt();
+    if (interval >= 0) {
+      settings.mqttInterval = (uint32_t)interval;
+    }
+  }
+
+  int mdPos = content.indexOf("mqtt_discover=");
+  if (mdPos >= 0) {
+    int endLine = content.indexOf('\n', mdPos);
+    String mdVal = endLine == -1 ? content.substring(mdPos + 14) : content.substring(mdPos + 14, endLine);
+    mdVal.trim();
+    if (mdVal.equalsIgnoreCase("on")) {
+      settings.mqttDiscover = true;
+    } else if (mdVal.equalsIgnoreCase("off")) {
+      settings.mqttDiscover = false;
+    }
+  }
+
+  settings.mqttPrefix = resolveMqttPrefix(settings.mqttPrefix);
+
   return settings;
 }
 
@@ -98,6 +182,14 @@ bool saveSettings(const AppSettings &settings) {
   content += String("auto_update=") + (settings.autoUpdateCheck ? "on" : "off") + "\n";
   content += String("powerprofile=") + settings.powerProfile + "\n";
   content += String("cpufreq=") + String(settings.cpufreq) + "\n";
+  content += String("mqtt_enabled=") + (settings.mqttEnabled ? "on" : "off") + "\n";
+  content += String("mqtt_host=") + settings.mqttHost + "\n";
+  content += String("mqtt_port=") + String(settings.mqttPort) + "\n";
+  content += String("mqtt_user=") + settings.mqttUser + "\n";
+  content += String("mqtt_pass=") + settings.mqttPass + "\n";
+  content += String("mqtt_prefix=") + settings.mqttPrefix + "\n";
+  content += String("mqtt_interval=") + String(settings.mqttInterval) + "\n";
+  content += String("mqtt_discover=") + (settings.mqttDiscover ? "on" : "off") + "\n";
   bool ok = writeText(kSettingsPath, content, false);
   if (ok) {
     Serial.println(F("System settings saved successfully."));
@@ -113,6 +205,13 @@ void printSettings(const AppSettings &settings, Print &out) {
   out.printf("  Auto Update Check: %s\n", settings.autoUpdateCheck ? "ON" : "OFF");
   out.printf("  Power Profile: %s\r\n", settings.powerProfile.c_str());
   out.printf("  CPU Freq: %d MHz\r\n", settings.cpufreq);
+  out.printf("  MQTT: %s  %s:%u  prefix=%s  interval=%us  discover=%s\r\n",
+             settings.mqttEnabled ? "on" : "off",
+             settings.mqttHost.length() > 0 ? settings.mqttHost.c_str() : "(not set)",
+             (unsigned)settings.mqttPort,
+             settings.mqttPrefix.c_str(),
+             (unsigned)settings.mqttInterval,
+             settings.mqttDiscover ? "on" : "off");
   out.printf("  Config file: %s\n", kSettingsPath);
 }
 

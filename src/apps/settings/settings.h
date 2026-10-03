@@ -12,6 +12,14 @@ struct AppSettings {
   bool autoUpdateCheck = true;
   String powerProfile = "balanced";
   int cpufreq = 80;
+  bool mqttEnabled = false;
+  String mqttHost = "";
+  uint16_t mqttPort = 1883;
+  String mqttUser = "";
+  String mqttPass = "";
+  String mqttPrefix = "";      // empty -> resolved to "harixos/<chipid>" at load
+  uint32_t mqttInterval = 60;  // seconds; 0 = off
+  bool mqttDiscover = true;
 };
 
 AppSettings loadSettings();

@@ -5,6 +5,7 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
+#include "../../api/api_types.h"
 
 namespace harixos {
 
@@ -17,7 +18,14 @@ public:
   // Supports both http:// and https:// URLs
   // Returns true on success, false on failure
   static bool downloadFile(const String &url, const String &savePath, Stream &output = Serial);
-  
+
+  // POST a body to url (plaintext HTTP webhook, no TLS)
+  // 2xx -> API_OK, message "HTTP <code>"; non-2xx -> API_ERROR, "HTTP <code>";
+  // WiFi down / connect fail / malformed URL -> API_ERROR with reason.
+  static harixos::api::ApiResult post(const String &url, const String &body,
+                                      const String &contentType = "application/json",
+                                      uint32_t timeoutMs = 5000);
+
   // Check if WiFi is connected
   static bool isWiFiConnected();
   

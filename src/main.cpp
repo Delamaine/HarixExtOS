@@ -23,6 +23,8 @@
 #include "apps/notepad/notepad.h"
 #include "apps/settings/settings.h"
 #include "kernel/filesystem/filesystem.h"
+#include "kernel/iot/mqtt_service.h"
+#include "kernel/iot/onchange.h"
 #include "utils/http/http_downloader.h"
 #include "api/app_manager.h"
 #include "api/expr.h"
@@ -351,6 +353,9 @@ void handleCat(const TokenizedLine &cmd);
 void handleWrite(const TokenizedLine &cmd);
 void handleAppend(const TokenizedLine &cmd);
 void handleNotepad(const TokenizedLine &cmd);
+void handlePost(const TokenizedLine &cmd);
+void handleMqtt(const String &line);
+void handleOnchange(const String &line);
 void handleSettings(const TokenizedLine &cmd);
 void handleServe(const TokenizedLine &cmd);
 void handleHttpStop();
@@ -612,6 +617,62 @@ void handleNotepad(const TokenizedLine &cmd) {
 
   String path = harixos::resolvePath(currentWorkingDirectory, cmd.tokens[1]);
   harixos::runNotepad(path);
+}
+
+void handlePost(const TokenizedLine &cmd) {
+  if (cmd.count < 3) {
+    Serial.println(F("Usage: post <url> <body> [content-type]"));
+    return;
+  }
+
+  String contentType =
+      cmd.count >= 4 ? cmd.tokens[3] : String("application/json");
+  harixos::api::ApiResult result =
+      harixos::HttpDownloader::post(cmd.tokens[1], cmd.tokens[2], contentType);
+  if (result.isError()) {
+    Serial.print(F("ERROR: "));
+  }
+  Serial.println(result.message);
+}
+
+// Shared body lives in iot::handleCommand; the shell passes the raw tail so
+// parsing is byte-identical with the script dispatcher's `mqtt <args>`.
+void handleMqtt(const String &line) {
+  harixos::api::ApiResult result =
+      harixos::iot::handleCommand(line.substring(4), Serial);
+  if (result.isError()) {
+    Serial.print(F("ERROR: "));
+  }
+  Serial.println(result.message);
+}
+
+void handleOnchange(const String &line) {
+  if (line.length() <= 7) {
+    harixos::iot::listOnchangeRules(Serial);
+    return;
+  }
+  String rest = line.substring(7);
+  String action = rest.substring(0, rest.indexOf(' '));
+  action.trim();
+  String args = rest.substring(action.length());
+  args.trim();
+  action.toLowerCase();
+  harixos::api::ApiResult result;
+  if (action == F("add")) {
+    result = harixos::iot::shellAddOnchange(args, Serial);
+  } else if (action == F("remove") || action == F("rm")) {
+    result = harixos::iot::shellRemoveOnchange(args, Serial);
+  } else if (action == F("list") || action == F("pins")) {
+    harixos::iot::listOnchangeRules(Serial);
+    return;
+  } else {
+    Serial.println(F("Usage: onchange [add|remove|list] [args]"));
+    return;
+  }
+  if (result.isError()) {
+    Serial.print(F("ERROR: "));
+  }
+  Serial.println(result.message);
 }
 
 void handleSettings(const TokenizedLine &cmd) {
@@ -1801,9 +1862,13 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  calc <expr>          Evaluate arithmetic expressions"));
     Serial.println(F("  set <name> = <expr>  Store a variable for $name in scripts"));
     Serial.println(F("  serve ...            HTTP file server tools (serve start|stop|status|serve <file> [port])"));
+    Serial.println(F("  post <url> <body>    Send HTTP webhook (POST)"));
+    Serial.println(F("  mqtt ...             MQTT/IoT service (mqtt status|start|stop|pub)"));
+    Serial.println(F("  onchange ...         GPIO onchange rules (onchange add|remove|list)"));
+    Serial.println(F("  vars ...             Variable storage (vars list|set|get|del|save|load|clear)"));
     Serial.println();
     Serial.println(F("Help topics:"));
-    Serial.println(F("  help wifi|gpio|fs|serve|time|schedule|update|sensor|servo  Show topic help"));
+    Serial.println(F("  help wifi|gpio|fs|serve|time|schedule|update|sensor|servo|mqtt  Show topic help"));
     return;
   }
 
@@ -1903,6 +1968,21 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  servo list               List all attached servos"));
     Serial.println();
     Serial.println(F("Uses ESP8266 native PWM (ledc). Auto-attaches on write if not attached."));
+  } else if (topic == F("mqtt")) {
+    Serial.println(F("MQTT commands (IoT / Home Assistant):"));
+    Serial.println(F("  mqtt status              Show connection, config, counters"));
+    Serial.println(F("  mqtt start               Enable MQTT service"));
+    Serial.println(F("  mqtt stop                Disable MQTT service"));
+    Serial.println(F("  mqtt pub <topic> <payload>  Publish raw message"));
+    Serial.println();
+    Serial.println(F("MQTT topics:"));
+    Serial.println(F("  <prefix>/telemetry       Device telemetry JSON"));
+    Serial.println(F("  <prefix>/shell/in        Shell commands (subscribe)"));
+    Serial.println(F("  <prefix>/shell/out       Command replies (publish)"));
+    Serial.println(F("  <prefix>/availability    Online/offline (LWT, retained)"));
+    Serial.println(F("  homeassistant/...        HA discovery messages"));
+    Serial.println();
+    Serial.println(F("Note: shell/in does NOT use retain (PubSubClient limitation)."));
   } else if (topic == F("motor")) {
     Serial.println(F("Motor commands (L293D Motor Shield):"));
     Serial.println(F("  motor init [m1|m2]       Initialize motor (M1: D5/D6, M2: D7/D1)"));
@@ -1925,7 +2005,6 @@ void handleCpuFreq(const String &line);
 void handleSensor(const String &line);
 void handleServo(const String &line);
 void handleMotor(const String &line);
-void handleVars(const String &line);
 
 void executeCommand(const String &line) {
   TokenizedLine cmd = tokenize(line);
@@ -1979,6 +2058,12 @@ void executeCommand(const String &line) {
     handleAppend(cmd);
   } else if (command == F("notepad")) {
     handleNotepad(cmd);
+  } else if (command == F("post")) {
+    handlePost(cmd);
+  } else if (command == F("mqtt")) {
+    handleMqtt(line);
+  } else if (command == F("onchange")) {
+    handleOnchange(line);
   } else if (command == F("settings")) {
     handleSettings(cmd);
   } else if (command == F("wifi")) {
@@ -2020,8 +2105,6 @@ void executeCommand(const String &line) {
   } else if (command == F("motor")) {
     String tail = line.substring(5);
     handleMotor(tail);
-  } else if (command == F("vars")) {
-    handleVars(line);
   } else {
     Serial.printf("Unknown command: %s\r\n", cmd.tokens[0].c_str());
     Serial.println(F("Type help for the command list."));
@@ -2552,104 +2635,8 @@ void handleMotor(const String &line) {
   Serial.println(F("Unknown motor action. Use: init, forward, reverse, stop, brake, speed, list"));
 }
 
-void handleVars(const String &line) {
-  String rest = line;
-  rest.trim();
-  if (rest.length() == 0) {
-    Serial.println(F("Usage: vars [list|set|get|del|save|load|clear] [args...]"));
-    return;
-  }
-
-  int sep = rest.indexOf(' ');
-  String action = sep < 0 ? rest : rest.substring(0, sep);
-  String tail = sep < 0 ? String("") : rest.substring(sep + 1);
-  tail.trim();
-
-  if (action.equalsIgnoreCase("list")) {
-    Serial.println(F("Variables:"));
-    harixos::api::vars::listValues([](const char *line) {
-      Serial.println(line);
-    });
-    Serial.printf("Count: %zu/%zu\r\n", harixos::api::vars::count(), harixos::api::vars::kMaxVars);
-    return;
-  }
-
-  if (action.equalsIgnoreCase("set")) {
-    if (tail.length() == 0) {
-      Serial.println(F("Usage: vars set <name>=<value>"));
-      return;
-    }
-    double value = 0;
-    const char *err = harixos::api::expr::assign(tail.c_str(), &value);
-    if (err != nullptr) {
-      Serial.println(err);
-      return;
-    }
-    char name[harixos::api::vars::kMaxNameLength + 1];
-    if (harixos::api::expr::parseSet(tail.c_str(), name, sizeof(name), nullptr)) {
-      harixos::api::vars::set(name, value);
-      Serial.printf("%s = %.10g\r\n", name, value);
-    }
-    return;
-  }
-
-  if (action.equalsIgnoreCase("get")) {
-    if (tail.length() == 0) {
-      Serial.println(F("Usage: vars get <name>"));
-      return;
-    }
-    tail.trim();
-    double value = 0;
-    if (harixos::api::vars::get(tail.c_str(), value)) {
-      Serial.printf("%s = %.10g\r\n", tail.c_str(), value);
-    } else {
-      Serial.printf("%s not found.\r\n", tail.c_str());
-    }
-    return;
-  }
-
-  if (action.equalsIgnoreCase("del") || action.equalsIgnoreCase("delete")) {
-    if (tail.length() == 0) {
-      Serial.println(F("Usage: vars del <name>"));
-      return;
-    }
-    tail.trim();
-    if (harixos::api::vars::delByName(tail.c_str())) {
-      Serial.printf("%s deleted.\r\n", tail.c_str());
-    } else {
-      Serial.printf("%s not found.\r\n", tail.c_str());
-    }
-    return;
-  }
-
-  if (action.equalsIgnoreCase("save")) {
-    if (harixos::api::vars::save(harixos::api::vars::kPersistPath)) {
-      Serial.println(F("Variables saved."));
-    } else {
-      Serial.println(F("Failed to save variables."));
-    }
-    return;
-  }
-
-  if (action.equalsIgnoreCase("load")) {
-    if (harixos::api::vars::load(harixos::api::vars::kPersistPath)) {
-      Serial.printf("Variables loaded (%zu).\r\n", harixos::api::vars::count());
-    } else {
-      Serial.println(F("No variables to load."));
-    }
-    return;
-  }
-
-  if (action.equalsIgnoreCase("clear")) {
-    harixos::api::vars::clear();
-    Serial.println(F("All variables cleared."));
-    return;
-  }
-
-  Serial.println(F("Unknown vars action: list, set, get, del, save, load, clear"));
-}
-
 }  // namespace
+
 
 extern "C" {
   #include "user_interface.h"
@@ -2721,7 +2708,10 @@ void setup() {
       checkSystemUpdates(false); // Show results even if up to date
     }
   }
-  
+
+  harixos::iot::begin();
+  harixos::iot::beginOnchange();
+
   printPrompt();
   
   // Ensure the serial buffer is completely sent before starting the main loop
@@ -2735,6 +2725,8 @@ void loop() {
     httpServer->handleClient();
   }
   harixos::kernel::systemScheduler.update();
+  harixos::iot::update();
+  harixos::iot::updateOnchange();
   
   // Auto-switch to lower power when no serial session is connected
   // Only switch if terminal has been idle for more than 1 minute

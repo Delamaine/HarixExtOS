@@ -8,6 +8,9 @@
 #include "tz_mapping.h"
 #include "../apps/settings/settings.h"
 #include "../kernel/filesystem/filesystem.h"
+#include "../kernel/iot/mqtt_service.h"
+#include "../kernel/iot/onchange.h"
+#include "../utils/http/http_downloader.h"
 
 namespace {
 
@@ -469,6 +472,62 @@ ApiResult ScriptEngine::handleSettingsTimeCommand(const String &name,
   return ApiResult(API_INVALID_ARGUMENT, "Unknown command: " + name);
 }
 
+// IoT keyword group: post/mqtt/onchange.
+// Delegates to HttpDownloader / iot::handleCommand like the other groups —
+// no IoT logic lives in this file.
+ApiResult ScriptEngine::handleIotCommand(const String &name, const String &args,
+                                         Stream &output) {
+  if (name == "post") {
+    // post <url> <body> [content-type]
+    String rest = args;
+    String url = takeWord(rest);
+    String body = takeWord(rest);
+    String contentType = takeWord(rest);
+    if (url.length() == 0 || body.length() == 0) {
+      return ApiResult(API_INVALID_ARGUMENT, "Usage: post <url> <body> [content-type]");
+    }
+    if (contentType.length() == 0) contentType = "application/json";
+    ApiResult result = harixos::HttpDownloader::post(url, body, contentType);
+    if (result.isError()) {
+      return result;  // executeScript frames it as [ERROR] <line>: <message>
+    }
+    output.println(result.message);
+    return ApiResult(API_OK, "");  // empty message so executeScript prints no [OK]
+  }
+  if (name == "mqtt") {
+    // mqtt status|start|stop|pub <topic> <payload> — shared body with shell
+    return harixos::iot::handleCommand(args, output);
+  }
+  if (name == "onchange") {
+    // onchange add|remove|list [args] — shared body with shell
+    if (args.length() == 0) {
+      harixos::iot::listOnchangeRules(output);
+      return ApiResult(API_OK, "");
+    }
+    String action = args.substring(0, args.indexOf(' '));
+    action.trim();
+    action.toLowerCase();
+    String rest = args.substring(action.length());
+    rest.trim();
+    action.toLowerCase();
+    ApiResult result;
+    if (action == "add") {
+      result = harixos::iot::shellAddOnchange(rest, output);
+    } else if (action == "remove" || action == "rm") {
+      result = harixos::iot::shellRemoveOnchange(rest, output);
+    } else if (action == "list" || action == "pins") {
+      harixos::iot::listOnchangeRules(output);
+      return ApiResult(API_OK, "");
+    } else {
+      return ApiResult(API_INVALID_ARGUMENT, "Usage: onchange [add|remove|list] [args]");
+    }
+    if (result.isError()) return result;
+    output.println(result.message);
+    return ApiResult(API_OK, "");
+  }
+  return ApiResult(API_INVALID_ARGUMENT, "Unknown IoT command: " + name);
+}
+
 ApiResult ScriptEngine::executeCommand(const String &command, Stream &output) {
   Command cmd = parseCommand(command);
   
@@ -503,6 +562,8 @@ ApiResult ScriptEngine::executeCommand(const String &command, Stream &output) {
   } else if (cmd.name == "settings" || cmd.name == "time" ||
              cmd.name == "reboot") {
     return handleSettingsTimeCommand(cmd.name, cmd.args, output);
+  } else if (cmd.name == "post" || cmd.name == "mqtt") {
+    return handleIotCommand(cmd.name, cmd.args, output);
   } else if (cmd.name.startsWith("/") || cmd.name.endsWith(".hx")) {
     // Treat as script path if it looks like one
     return handleRunCommand(command, output);
@@ -524,6 +585,8 @@ ApiResult ScriptEngine::executeScript(const String &script, Stream &output) {
     message += ")";
     return ApiResult(API_ERROR, message);
   }
+
+  harixos::iot::setScriptActive(true);
 
   // Split script into lines and execute each
   int startIdx = 0;
@@ -641,6 +704,7 @@ ApiResult ScriptEngine::executeScript(const String &script, Stream &output) {
   
   output.printf("--- Script Complete: %d lines, %d errors ---\r\n", lineCount, errorCount);
   
+  harixos::iot::setScriptActive(false);
   return errorCount == 0 ? ApiResult(API_OK, "Script executed") 
                          : ApiResult(API_ERROR, String(errorCount) + " errors");
 }
@@ -698,6 +762,10 @@ void ScriptEngine::printHelp(Stream &output) {
   output.println(F("  settings [show|save]    Show or save settings"));
   output.println(F("  time [sync]             Show time or request NTP"));
   output.println(F("  reboot                  Reboot device"));
+  output.println();
+  output.println(F("IoT:"));
+  output.println(F("  post <url> <body> [ctype]  HTTP POST webhook"));
+  output.println(F("  mqtt status|start|stop|pub <topic> <payload>  MQTT service"));
   output.println();
   output.println(F("Other:"));
   output.println(F("  set <name> = <expr>     Assign a variable"));

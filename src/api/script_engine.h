@@ -49,6 +49,8 @@ private:
   static ApiResult handleSystemValueCommand(const String &name, const String &args, Stream &output);
   static ApiResult handleFilesystemCommand(const String &name, const String &args, Stream &output);
   static ApiResult handleSettingsTimeCommand(const String &name, const String &args, Stream &output);
+  // Single IoT handler group (post, mqtt, onchange).
+  static ApiResult handleIotCommand(const String &name, const String &args, Stream &output);
   
   // Tokenize a line into parts
   struct Command {
