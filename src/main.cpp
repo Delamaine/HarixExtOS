@@ -1638,8 +1638,7 @@ void handleTime(const TokenizedLine &cmd) {
     struct tm *timeinfo = localtime(&now);
     char buf[64];
     strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", timeinfo);
-    const char* posixStr = harixos::api::tz::toPosix(shellSettings.timezone.c_str());
-    Serial.printf("Current Time: %s (Timezone: %s -> %s)\r\n", buf, shellSettings.timezone.c_str(), posixStr);
+    Serial.println(buf);
     return;
   }
   
@@ -1735,7 +1734,7 @@ void handleSchedule(const String &line) {
 
   if (rest.length() == 0) {
     harixos::kernel::systemScheduler.listTasks(Serial);
-    Serial.println(F("Usage: schedule add <sec> <min> <hour> <dom> <month> <dow> <command> | schedule remove <id> | schedule list"));
+    Serial.println(F("Usage: schedule add <sec> <min> <hour> <dom> <month> <dow> <command> | schedule remove <id> | schedule run <id> | schedule list"));
     return;
   }
 
@@ -1803,6 +1802,19 @@ void handleSchedule(const String &line) {
       return;
     }
     Serial.println(F("Task removed."));
+    return;
+  }
+
+  if (action == F("run")) {
+    if (tail.length() == 0) {
+      Serial.println(F("Usage: schedule run <id>"));
+      return;
+    }
+    int id = tail.toInt();
+    if (harixos::kernel::systemScheduler.runTask(id) != 0) {
+      Serial.println(F("Task not found."));
+      return;
+    }
     return;
   }
 
@@ -1940,6 +1952,7 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("Scheduler commands (6-field cron: sec min hour dom month dow):"));
     Serial.println(F("  schedule list                     List all tasks"));
     Serial.println(F("  schedule remove <id>              Remove task by ID"));
+    Serial.println(F("  schedule run <id>                 Run a task now, ignoring its schedule"));
     Serial.println(F("  schedule add <6 fields> <command> Add a task"));
     Serial.println();
     Serial.println(F("Fields: 0-59 sec, 0-59 min, 0-23 hour, 1-31 dom,"));

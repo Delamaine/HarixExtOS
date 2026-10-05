@@ -46,6 +46,24 @@ bool Scheduler::removeTask(int id) {
   return false;
 }
 
+int Scheduler::runTask(int id) {
+  for (int i = 0; i < taskCount; ++i) {
+    if (tasks[i].id == id) {
+      Serial.printf("\r\n[Scheduler] Manually executing task #%d: %s\r\n", tasks[i].id,
+                    tasks[i].command.c_str());
+      harixos::api::ApiResult result =
+          harixos::api::ScriptEngine::executeCommand(tasks[i].command, Serial);
+      if (result.isError()) {
+        Serial.printf("[ERROR] %s: %s\r\n", tasks[i].command.c_str(),
+                      result.message.c_str());
+      }
+      Serial.print(F("\r\nHarixOS> "));
+      return 0;
+    }
+  }
+  return -1;
+}
+
 void Scheduler::listTasks(Print &out) {
   if (taskCount == 0) {
     out.println(F("No scheduled tasks."));

@@ -2,7 +2,7 @@ HarixOS Shell Commands
 =======================
 
 Core shell commands
-- `help [topic]` — Show help and command list (`help wifi|gpio|fs|serve|time|schedule|update|sensor|servo|mqtt|onchange`)
+- `help [topic]` — Show help and command list (`help wifi|gpio|i2c|fs|serve|post|mqtt|onchange|time|schedule|update|sensor|servo|motor|run|calc|set|vars|settings|powerprofile|cpufreq`)
 - `about` — Show version and feature list
 - `info` — Show system, flash and memory information
 - `chip` — Show chip and flash details
@@ -13,7 +13,7 @@ Core shell commands
 - `clear` (or `cls`) — Clear serial console (emulator)
 - `update check` — Check for system updates via GitHub
 - `pull <url> <path>` — Download file from the internet (HTTP/HTTPS)
-- `time` — Show time; `time sync`, `time list-tz`, `time set` manage NTP/timezone
+- `time` — Show time; `time sync`, `time list-tz` (alias `timezones`), `time set` manage NTP/timezone
 - `powerprofile [full|balanced|powersave|minimal|off]` — Power profile (`powerprofile set <profile>|apply|status`)
 - `cpufreq [40|80]` — CPU frequency (`cpufreq set <freq>|status`). The
   ESP8266 SDK rejects 40 MHz at runtime, so 80 is the only value that applies.
@@ -23,6 +23,7 @@ Core shell commands
 schedule list
 schedule add <sec> <min> <hour> <dom> <month> <dow> <command>
 schedule remove <id>
+schedule run <id>
 ```
 
   Field order and ranges: `sec` 0-59, `min` 0-59, `hour` 0-23, `dom` 1-31,
@@ -62,6 +63,31 @@ schedule add 0 0 9 15 * 1 ping
   aborting the load.
 
 
+Dynamic powerprofile switching (auto power save)
+- The device auto-lowers power when a serial terminal is not actively
+  connected. Detection is `Serial.available() > 0` (buffered input present),
+  re-evaluated every `loop()`.
+- A state change (connected ⇄ idle) resets a timer. The switch only fires
+  once the state has been stable for **60 seconds**, so brief bursts of
+  traffic never trigger it.
+- **Idle ≥ 60 s** and the current profile is `balanced` or `full` → switch
+  to `powersave` and print `Terminal idle for 1 minute. Switched to
+  powersave.` Profiles already `powersave`, `minimal` or `off` are left
+  untouched.
+- **Reconnected ≥ 60 s** → restore the saved profile from settings and the
+  saved CPU frequency, and print `Terminal active for 1 minute. Restored
+  profile: <profile>.`
+- After a switch the timer resets, so it won't repeat until the state
+  changes again. This runs in `loop()` (`src/main.cpp`) and is independent
+  of `powerprofile set`/`apply`, which drive the same `applyPowerProfile`
+  code path.
+
+  Note: `balanced` and `powersave` both program `MODEM_SLEEP_T` on the
+  ESP8266, so the idle→powersave switch prints a message but does not change
+  the actual WiFi sleep type — the real savings come from the terminal being
+  idle, not from the profile switch itself.
+
+
 Filesystem commands (each works top-level and with an `fs ` prefix,
 e.g. `fs ls`)
 - `pwd` — Print current working directory
@@ -80,7 +106,7 @@ There is no `format` command; LittleFS is formatted at provision time.
 
 Apps and variables
 - `notepad <path>` — Open interactive line editor
-- `settings` — Show and edit persistent shell settings (`settings show|banner|timezone|update|save|reload`)
+- `settings` — Show and edit persistent shell settings (`settings show|banner|timezone|tz|update|save|reload`)
 - `calc <expr>` — Evaluate arithmetic expressions
 - `set <name> = <expr>` — Store a script variable usable as `$name`
 - `vars [list|set|get|del|save|load|clear]` — Global variable store

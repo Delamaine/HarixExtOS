@@ -47,8 +47,6 @@ AppSettings loadSettings() {
     }
   }
 
-
-
   int ssidPos = content.indexOf("wifiSSID=");
   if (ssidPos >= 0) {
     int endLine = content.indexOf('\n', ssidPos);

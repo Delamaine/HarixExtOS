@@ -26,6 +26,10 @@ public:
   // Remove task by ID
   bool removeTask(int id);
 
+  // Execute a specific task by ID regardless of schedule. Returns 0 on success,
+  // -1 if the id is unknown.
+  int runTask(int id);
+
   // List all tasks to output
   void listTasks(Print &out);
 

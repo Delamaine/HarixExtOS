@@ -10,7 +10,7 @@ struct AppSettings {
   String wifiSSID = "";
   String wifiPassword = "";
   bool autoUpdateCheck = true;
-  String powerProfile = "balanced";
+   String powerProfile = "full";
   int cpufreq = 80;
   bool mqttEnabled = false;
   String mqttHost = "";
