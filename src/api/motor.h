@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+#include "api_types.h"
+
 namespace harixos {
 namespace api {
 
@@ -48,6 +50,11 @@ public:
 
   // List all initialized motors
   static void listAll(Stream &out);
+
+  // Shared `motor <action> ...` parser used by the shell and the script
+  // engine. Informational output goes to `out`; failures come back as
+  // ApiResult so scripts report [ERROR] instead of silently succeeding.
+  static ApiResult runCommand(const String &args, Stream &out);
 
   // Basic control
   void forward();

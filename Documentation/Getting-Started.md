@@ -132,4 +132,4 @@ See [API Documentation](./API.md) for complete reference.
 
 Upgrading
 - Make changes and re-run `pio run --target upload`.
-- Files on LittleFS persist across uploads only if flashing does not erase the filesystem; use `fs format` to reset storage.
+- Files on LittleFS persist across uploads only if flashing does not erase the filesystem. To reset storage, erase the chip (`python -m platformio run -e nodemcuv2 -t erase`) and flash again — there is no `fs format` command.

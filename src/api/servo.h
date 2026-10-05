@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+#include "api_types.h"
+
 namespace harixos {
 namespace api {
 
@@ -44,6 +46,11 @@ public:
 
   // List all attached servos
   static void listAll(Stream &out);
+
+  // Shared `servo <action> ...` parser used by the shell and the script
+  // engine. Informational output goes to `out`; failures come back as
+  // ApiResult so scripts report [ERROR] instead of silently succeeding.
+  static ApiResult runCommand(const String &args, Stream &out);
 
   // Write angle (0-180 degrees)
   void writeAngle(uint8_t angle);

@@ -3,22 +3,30 @@
 ## Keywords available to scripts and scheduled commands
 
 `.hx` scripts and `schedule add` share one command dispatcher, so every
-keyword below works identically in both. This is the set added for
-scripting and scheduling (21 in total):
+keyword below works identically in both:
 
+**Output and control:** `print`, `if`/`else`/`end`, `while`/`end`, `break`, `#`
 **System values:** `heap`, `uptime`, `chip`, `info`, `adc`, `calc`
 **Filesystem:** `pwd`, `cd`, `ls`, `mkdir`, `touch`, `rm`, `cp`, `mv`,
 `cat`, `write`, `append`
 **Settings and time:** `settings`, `time`, `reboot`
+**WiFi and GPIO:** `wifi`, `gpio`, `delay`, `system`, `run <path>`, `help`
 **Servo:** `servo attach`, `servo detach`, `servo write`, `servo read`, `servo list`
 **Sensor:** `sensor init`, `sensor ping`, `sensor read`, `sensor list`
 **Motor:** `motor init`, `motor forward`, `motor reverse`, `motor stop`, `motor brake`, `motor speed`, `motor list`
-**Variables:** `set`
+**IoT:** `post`, `mqtt`, `onchange`
+**Variables:** `set`, `vars list|set|get|del|save|load|clear`
 
-Deliberately not available to either: `serve`, `i2c`, `notepad`,
-`update`, `pull` (spec §8).
+Shell-only (typing these inside a script or `schedule add` reports
+`Unknown command`): `about`, `pull`, `update`, `serve`, `i2c`, `notepad`,
+`schedule`, `powerprofile`, `cpufreq`, `fs`, `cls`, `reset`, and
+the `run list|install|uninstall` subcommands (spec §8 for the deferred
+group).
 
-## New Commands
+## New Commands (shell only — not script keywords)
+
+The `about`, `pull` and `update` commands below are interactive-shell
+commands; they are not available inside `.hx` scripts or `schedule add`.
 
 ### About Command
 
@@ -338,6 +346,43 @@ motor brake m2
 motor list
 ```
 
+## IoT Commands (`post` / `mqtt` / `onchange`)
+
+These work in the shell, in `.hx` scripts, in `schedule add` tasks, and
+over MQTT `<prefix>/shell/in`.
+
+### `post` — HTTP webhook
+
+```bash
+post <url> <body> [content-type]   # content-type defaults to application/json
+post https://api.example.com/event {"type":"gpio","pin":2}
+post http://localhost:8080/log hello text/plain
+```
+
+### `mqtt` — MQTT service
+
+```bash
+mqtt status                        # connection, config, counters
+mqtt start                         # enable service (persists; `mqtt on` is an alias)
+mqtt stop                          # disable service (`mqtt off` is an alias)
+mqtt pub <topic> <payload>         # publish verbatim — no prefix is added
+```
+
+Broker, prefix and interval are configured with `mqtt_*` keys in
+`/harixos/settings.cfg`; topic map and Home Assistant setup are in
+`Documentation/ha-mqtt.md`.
+
+### `onchange` — GPIO edge rules
+
+```bash
+onchange add <pin> <rising|falling|both>   # pin accepts GPIO numbers or D2 style
+onchange remove <pin>
+onchange list
+```
+
+Rules persist to `/onchange.rules` (max 8 rules) and reload at boot.
+Pin mode is configured to input automatically when a rule is registered.
+
 ## WiFi Command (Networking)
 
 ```bash
@@ -350,11 +395,16 @@ wifi ip                    # Show IP configuration
 
 ## Time & Schedule Commands (Automation)
 
+`time`, `settings` and `reboot` are script keywords; `schedule` itself is
+**shell-only** — but the command a task runs uses the script dispatcher
+listed at the top of this document.
+
 ### System Clock
 ```bash
-time                       # Show current time
-time sync <TZ_STRING>      # Sync via NTP (e.g., PKT-5)
-time list-tz               # Show timezone examples
+time                       # Show current time (script: show time)
+time sync                  # Sync via NTP (script keyword)
+time sync <TZ_STRING>      # Shell: sync with explicit POSIX/IANA tz
+time list-tz               # Shell: show timezone examples
 ```
 
 ### Task Scheduler

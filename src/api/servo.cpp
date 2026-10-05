@@ -124,5 +124,87 @@ void ServoAPI::writeCalibrated(uint8_t angle) {
   writeAngle((uint8_t)calibrated);
 }
 
+ApiResult ServoAPI::runCommand(const String &args, Stream &out) {
+  String rest = args;
+  rest.trim();
+  if (rest.length() == 0) {
+    return ApiResult(API_INVALID_ARGUMENT,
+                     "Usage: servo write <pin> <angle> | servo attach <pin> | "
+                     "servo detach <pin> | servo read <pin> | servo list");
+  }
+
+  int sep = rest.indexOf(' ');
+  String action = sep < 0 ? rest : rest.substring(0, sep);
+  String tail = sep < 0 ? String("") : rest.substring(sep + 1);
+  tail.trim();
+
+  if (action.equalsIgnoreCase("attach")) {
+    if (tail.length() == 0) {
+      return ApiResult(API_INVALID_ARGUMENT, "Usage: servo attach <pin>");
+    }
+    uint8_t pin = tail.toInt();
+    int result = attach(pin);
+    if (result < 0) {
+      return ApiResult(API_ERROR, "Servo pool full.");
+    }
+    out.printf("Servo attached to GPIO%d (instance %d)\r\n", pin, result);
+    return ApiResult(API_OK, "");
+  }
+
+  if (action.equalsIgnoreCase("detach")) {
+    if (tail.length() == 0) {
+      return ApiResult(API_INVALID_ARGUMENT, "Usage: servo detach <pin>");
+    }
+    uint8_t pin = tail.toInt();
+    if (detach(pin) < 0) {
+      return ApiResult(API_ERROR, "Servo not found.");
+    }
+    out.printf("Servo detached from GPIO%d\r\n", pin);
+    return ApiResult(API_OK, "");
+  }
+
+  if (action.equalsIgnoreCase("write")) {
+    if (tail.length() == 0) {
+      return ApiResult(API_INVALID_ARGUMENT, "Usage: servo write <pin> <angle>");
+    }
+    int sep2 = tail.indexOf(' ');
+    uint8_t pin = (sep2 < 0) ? tail.toInt() : tail.substring(0, sep2).toInt();
+    uint8_t angle = (sep2 < 0) ? 90 : tail.substring(sep2 + 1).toInt();
+    if (angle > 180) angle = 180;
+
+    ServoAPI *servo = findByPin(pin);
+    if (!servo && attach(pin) >= 0) {
+      servo = findByPin(pin);
+    }
+    if (!servo) {
+      return ApiResult(API_ERROR, "Servo not found.");
+    }
+    servo->writeAngle(angle);
+    out.printf("Servo GPIO%d -> %d degrees\r\n", pin, angle);
+    return ApiResult(API_OK, "");
+  }
+
+  if (action.equalsIgnoreCase("read")) {
+    if (tail.length() == 0) {
+      return ApiResult(API_INVALID_ARGUMENT, "Usage: servo read <pin>");
+    }
+    uint8_t pin = tail.toInt();
+    ServoAPI *servo = findByPin(pin);
+    if (!servo) {
+      return ApiResult(API_ERROR, "Servo not found.");
+    }
+    out.printf("Servo GPIO%d: %d degrees\r\n", pin, servo->readAngle());
+    return ApiResult(API_OK, "");
+  }
+
+  if (action.equalsIgnoreCase("list")) {
+    listAll(out);
+    return ApiResult(API_OK, "");
+  }
+
+  return ApiResult(API_INVALID_ARGUMENT,
+                   "Unknown servo action. Use: attach, detach, write, read, list");
+}
+
 }  // namespace api
 }  // namespace harixos

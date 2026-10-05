@@ -2,13 +2,21 @@ HarixOS Shell Commands
 =======================
 
 Core shell commands
-- `help` — Show help and command list
+- `help [topic]` — Show help and command list (`help wifi|gpio|fs|serve|time|schedule|update|sensor|servo|mqtt|onchange`)
+- `about` — Show version and feature list
 - `info` — Show system, flash and memory information
-- `reboot` — Restart the device
-- `clear` — Clear serial console (emulator)
+- `chip` — Show chip and flash details
+- `heap` — Show free heap
+- `uptime` — Show runtime
+- `reboot` — Restart the device (`reset` is an alias that prints a rename notice)
+- `adc` (or `a0`) — Read analog pin A0
+- `clear` (or `cls`) — Clear serial console (emulator)
 - `update check` — Check for system updates via GitHub
 - `pull <url> <path>` — Download file from the internet (HTTP/HTTPS)
-- `time` — Show time and NTP sync options
+- `time` — Show time; `time sync`, `time list-tz`, `time set` manage NTP/timezone
+- `powerprofile [full|balanced|powersave|minimal|off]` — Power profile (`powerprofile set <profile>|apply|status`)
+- `cpufreq [40|80]` — CPU frequency (`cpufreq set <freq>|status`). The
+  ESP8266 SDK rejects 40 MHz at runtime, so 80 is the only value that applies.
 - `schedule` — Manage background tasks with 6-field cron
 
 ```
@@ -54,24 +62,33 @@ schedule add 0 0 9 15 * 1 ping
   aborting the load.
 
 
-Filesystem (`fs`) commands
+Filesystem commands (each works top-level and with an `fs ` prefix,
+e.g. `fs ls`)
 - `pwd` — Print current working directory
-- `ls [path]` — List directory contents
+- `ls [-R] [path]` — List directory contents
 - `cd <path>` — Change directory (supports `..` and absolute paths)
 - `mkdir <path>` — Create directory recursively
 - `touch <path>` — Create empty file
 - `cat <file>` — Display file contents
 - `write <file> <text...>` — Overwrite file with text
 - `append <file> <text...>` — Append text to file
-- `rm <path>` — Remove file or empty directory
+- `rm [-r] <path>` — Remove file or directory
 - `cp <src> <dst>` — Copy files (not recursive)
 - `mv <src> <dst>` — Move/rename files
-- `format` — Format LittleFS filesystem (erases data)
 
-Apps
+There is no `format` command; LittleFS is formatted at provision time.
+
+Apps and variables
 - `notepad <path>` — Open interactive line editor
-- `settings` — Show and edit persistent shell settings (e.g., `settings update on|off`)
+- `settings` — Show and edit persistent shell settings (`settings show|banner|timezone|update|save|reload`)
 - `calc <expr>` — Evaluate arithmetic expressions
+- `set <name> = <expr>` — Store a script variable usable as `$name`
+- `vars [list|set|get|del|save|load|clear]` — Global variable store
+  (persisted to `/vars.dat`; `vars set <name>=<value>`, `vars get <name>`,
+  `vars del <name>`, `vars save`, `vars load`, `vars clear`). Also a script
+  keyword, so it works in `.hx` files, `schedule add` and MQTT `shell/in`.
+- `run <path>` / `run list` / `run install <name>` / `run uninstall <name>` —
+  Run or manage `.hx` apps
 
 HTTP file server
 - `serve <file> [port]` — Start a simple HTTP server serving the provided file as the index. If not connected to Wi‑Fi the shell will prompt for SSID and password. Returns the device IP and port when started.
@@ -81,16 +98,45 @@ HTTP file server
 Notes: When serving a file (for example `/www/index.html`), linked resources referenced by paths in the HTML (e.g., `/script.js`, `/styles.css`) will also be served from the same directory. The server logs each request to Serial.
 
 Networking
+- `wifi status` — Show Wi‑Fi status
 - `wifi scan` — Scan available networks
 - `wifi connect '<ssid>' '<pass>'` — Connect to Wi‑Fi (use quotes for SSID/Pass)
-- `wifi status` — Show Wi‑Fi status
+- `wifi disconnect` — Disconnect and clear the current session
+- `wifi ap '<ssid>' '<pass>'` — Start an access point
+- `wifi mode off|sta|ap|staap` — Set Wi‑Fi mode
+- `wifi ip` — Show IP configuration
+- `wifi mac` — Show MAC addresses
+
+IoT (MQTT / webhooks)
+- `mqtt status` — Connection state, config (password masked) and counters
+- `mqtt start` / `mqtt on` — Enable the MQTT service (persists to settings)
+- `mqtt stop` / `mqtt off` — Disable the MQTT service
+- `mqtt pub <topic> <payload>` — Publish a raw message (topic is used verbatim,
+  no prefix is added)
+
+  Broker, credentials, prefix and telemetry interval come from `mqtt_host`,
+  `mqtt_port`, `mqtt_user`, `mqtt_pass`, `mqtt_prefix`, `mqtt_interval`,
+  `mqtt_discover`, `mqtt_enabled` in `/harixos/settings.cfg` — there is no
+  `settings mqtt_*` command; edit the file and run `settings reload`.
+  Full topic map, HA discovery and examples: `Documentation/ha-mqtt.md`.
+
+- `post <url> <body> [content-type]` — HTTP POST webhook
+  (content-type defaults to `application/json`)
+
+- `onchange add <pin> <rising|falling|both>` — Register a GPIO edge rule
+  (pin accepts `4` or `D2` style; rules persist to `/onchange.rules`, max 8).
+  Rules are armed but no callback runs on an edge yet — see `ha-mqtt.md`.
+- `onchange remove <pin>` — Remove a rule
+- `onchange list` — Show active rules (bare `onchange` lists too)
 
 Hardware
 - `gpio read <pin>` — Read GPIO
 - `gpio write <pin> <on|off|toggle|0|1>` — Set GPIO output
+- `gpio list|mode|pulse` — Pin listing, mode and pulse output
 - `i2c scan` — Scan for I2C devices
+- `i2c begin <sda> <scl>` — Initialize the I2C bus
 
-Hardware
+Hardware drivers
 - Servo control:
 
 ```

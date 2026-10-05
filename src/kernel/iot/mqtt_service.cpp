@@ -32,6 +32,11 @@ bool availabilityPending = false;  // publish "online" once after each connect
 uint32_t connectFailures = 0;
 uint32_t publishFailures = 0;
 uint32_t droppedTelemetry = 0;
+uint32_t callbackCount = 0;
+bool subscribed = false;
+String lastPublishedTopic;
+String lastPublishedPayload;
+uint32_t selfPublishStartMs = 0;
 
 // Shell-in topic prefix (resolved at runtime from settings).
 String shellInTopic() {
@@ -40,8 +45,21 @@ String shellInTopic() {
 
 // MQTT callback for <prefix>/shell/in.
 void mqttCallback(char *topic, byte *payload, unsigned int length) {
+  callbackCount++;
   String t(topic);
-  if (t == shellInTopic()) {
+  String expected = shellInTopic();
+  
+  if (t == expected) {
+    // Echo avoidance: skip messages we just published ourselves (within 200ms)
+    String dump;
+    for (unsigned int i = 0; i < length && i < 80; i++) {
+      dump += (char)payload[i];
+    }
+    uint32_t now = millis();
+    if ((now - selfPublishStartMs) < 200 && dump == lastPublishedPayload && t == lastPublishedTopic) {
+      return;
+    }
+    
     if (length == 0) {
       // Empty payload → publish error immediately.
       publishRaw(shellSettings.mqttPrefix + "/shell/out", "ERROR: empty line");
@@ -76,6 +94,16 @@ String haPrefix() {
 
 String availabilityTopic() {
   return shellSettings.mqttPrefix + "/availability";
+}
+
+// Retained HA switch state: <prefix>/mqtt_enabled = "on"|"off".
+// Published on connect, and on `mqtt start` / `mqtt stop`.
+String enabledStateTopic() {
+  return shellSettings.mqttPrefix + "/mqtt_enabled";
+}
+
+void publishEnabledState() {
+  publishRaw(enabledStateTopic(), shellSettings.mqttEnabled ? "on" : "off", true);
 }
 
 void resetBackoff() {
@@ -149,6 +177,7 @@ void disconnectGracefully() {
   }
   publishRaw(availabilityTopic(), "offline", true);
   client.disconnect();
+  subscribed = false;
 }
 
 }  // namespace
@@ -268,10 +297,16 @@ void update() {
       firstConnect = false;
       publishHADiscovery();
     }
+    // Subscribe to shell/in (first connect + reconnection)
+    if (!subscribed) {
+      String topic = shellInTopic();
+      subscribed = client.subscribe(topic.c_str(), 0);
+    }
   }
   if (availabilityPending) {
     availabilityPending = false;
     publishRaw(availabilityTopic(), "online", true);
+    publishEnabledState();
   }
   client.loop();
 
@@ -279,9 +314,11 @@ void update() {
   while (inbound().size() > 0) {
     char line[InboundQueue::kLineMax];
     if (!inbound().pop(line)) break;
+
     StringStream capture;
     harixos::api::ApiResult r =
         harixos::api::ScriptEngine::executeCommand(String(line), capture);
+
     String reply;
     if (r.isError()) {
       reply = String("ERROR: ") + r.message;
@@ -307,6 +344,7 @@ void update() {
                                                : (reply.length() - pos);
       String chunk = reply.substring((int)pos, (int)(pos + chunkLen));
       publishRaw(shellSettings.mqttPrefix + "/shell/out", chunk);
+      
       pos += chunkLen;
       if (truncated && pos >= kReplyCap) break;
     }
@@ -340,14 +378,19 @@ bool isConnected() {
 }
 
 harixos::api::ApiResult publishRaw(const String &topic, const String &payload,
-                                   bool retained) {
+                                    bool retained) {
   if (!client.connected()) {
     return api::ApiResult(api::API_ERROR, "mqtt: not connected");
   }
-  if (!client.publish(topic.c_str(), payload.c_str(), retained)) {
+  bool ok = client.publish(topic.c_str(), payload.c_str(), retained);
+  if (!ok) {
     ++publishFailures;
     return api::ApiResult(api::API_ERROR, "mqtt: publish failed");
   }
+  // Record publish timestamp for echo avoidance
+  lastPublishedTopic = topic;
+  lastPublishedPayload = payload;
+  selfPublishStartMs = millis();
   return api::ApiResult(api::API_OK, "");
 }
 
@@ -421,18 +464,20 @@ harixos::api::ApiResult handleCommand(const String &argsIn, Stream &output) {
     return api::ApiResult(api::API_OK, "");
   }
 
-  if (action == "start") {
+  if (action == "start" || action == "on") {
     shellSettings.mqttEnabled = true;
     resetBackoff();
     if (!saveSettings(shellSettings)) {
       return api::ApiResult(api::API_ERROR,
                             "mqtt: enabled, but settings save failed");
     }
+    publishEnabledState();
     return api::ApiResult(api::API_OK, "mqtt: enabled");
   }
 
-  if (action == "stop") {
+  if (action == "stop" || action == "off") {
     shellSettings.mqttEnabled = false;
+    publishEnabledState();
     disconnectGracefully();
     resetBackoff();
     if (!saveSettings(shellSettings)) {
@@ -459,7 +504,7 @@ harixos::api::ApiResult handleCommand(const String &argsIn, Stream &output) {
   }
 
   return api::ApiResult(api::API_INVALID_ARGUMENT,
-                        "Usage: mqtt status|start|stop|pub <topic> <payload>");
+                        "Usage: mqtt status|start|stop|on|off|pub <topic> <payload>");
 }
 
 }  // namespace iot

@@ -647,11 +647,12 @@ void handleMqtt(const String &line) {
 }
 
 void handleOnchange(const String &line) {
-  if (line.length() <= 7) {
+  if (line.length() <= 8) {
     harixos::iot::listOnchangeRules(Serial);
     return;
   }
-  String rest = line.substring(7);
+  String rest = line.substring(8);
+  rest.trim();
   String action = rest.substring(0, rest.indexOf(' '));
   action.trim();
   String args = rest.substring(action.length());
@@ -666,7 +667,7 @@ void handleOnchange(const String &line) {
     harixos::iot::listOnchangeRules(Serial);
     return;
   } else {
-    Serial.println(F("Usage: onchange [add|remove|list] [args]"));
+    Serial.println(F("Usage: onchange [add|remove|list] (see 'help onchange')"));
     return;
   }
   if (result.isError()) {
@@ -1838,7 +1839,7 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  cat <path>           Print file contents"));
     Serial.println(F("  write <path> <txt>   Replace file contents"));
     Serial.println(F("  append <path> <txt>  Append to file"));
-    Serial.println(F("  fs ...               Filesystem (LittleFS) tools (fs show|format|df|stats)"));
+    Serial.println(F("  fs ...               Filesystem tools, same as top-level (fs pwd|cd|ls|mkdir|touch|rm|cp|mv|cat|write|append)"));
     Serial.println();
     Serial.println(F("Hardware & networking:"));
     Serial.println(F("  gpio ...             GPIO control and listing (gpio list|mode|read|write|pulse)"));
@@ -1863,12 +1864,12 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  set <name> = <expr>  Store a variable for $name in scripts"));
     Serial.println(F("  serve ...            HTTP file server tools (serve start|stop|status|serve <file> [port])"));
     Serial.println(F("  post <url> <body>    Send HTTP webhook (POST)"));
-    Serial.println(F("  mqtt ...             MQTT/IoT service (mqtt status|start|stop|pub)"));
+    Serial.println(F("  mqtt ...             MQTT/IoT service (mqtt status|start|stop|on|off|pub)"));
     Serial.println(F("  onchange ...         GPIO onchange rules (onchange add|remove|list)"));
     Serial.println(F("  vars ...             Variable storage (vars list|set|get|del|save|load|clear)"));
     Serial.println();
     Serial.println(F("Help topics:"));
-    Serial.println(F("  help wifi|gpio|fs|serve|time|schedule|update|sensor|servo|mqtt  Show topic help"));
+    Serial.println(F("  help wifi|gpio|fs|serve|time|schedule|update|sensor|servo|mqtt|onchange  Show topic help"));
     return;
   }
 
@@ -1973,6 +1974,7 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  mqtt status              Show connection, config, counters"));
     Serial.println(F("  mqtt start               Enable MQTT service"));
     Serial.println(F("  mqtt stop                Disable MQTT service"));
+    Serial.println(F("  mqtt on|off              Alias for start/stop (used by HA switch)"));
     Serial.println(F("  mqtt pub <topic> <payload>  Publish raw message"));
     Serial.println();
     Serial.println(F("MQTT topics:"));
@@ -1995,6 +1997,12 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println();
     Serial.println(F("Controls 2 DC motors via PWM + GPIO direction pins."));
     Serial.println(F("Speed: 0-100% PWM duty cycle. Direction: forward/reverse."));
+  } else if (topic == F("onchange")) {
+    Serial.println(F("Onchange commands (GPIO edge detection):"));
+    Serial.println(F("  onchange add <pin> <rising|falling|both>  Register edge handler"));
+    Serial.println(F("  onchange remove <pin>  Remove onchange rule"));
+    Serial.println(F("  onchange list          List all onchange rules"));
+    Serial.println(F("      Pins accept 'D5' or '5'. Rules persist across reboots."));
   } else {
     Serial.println(F("Unknown help topic."));
   }
@@ -2005,6 +2013,7 @@ void handleCpuFreq(const String &line);
 void handleSensor(const String &line);
 void handleServo(const String &line);
 void handleMotor(const String &line);
+void handleVars(const String &line);
 
 void executeCommand(const String &line) {
   TokenizedLine cmd = tokenize(line);
@@ -2105,6 +2114,8 @@ void executeCommand(const String &line) {
   } else if (command == F("motor")) {
     String tail = line.substring(5);
     handleMotor(tail);
+  } else if (command == F("vars")) {
+    handleVars(line.substring(5));
   } else {
     Serial.printf("Unknown command: %s\r\n", cmd.tokens[0].c_str());
     Serial.println(F("Type help for the command list."));
@@ -2292,347 +2303,39 @@ void handleCpuFreq(const String &line) {
 }
 
 void handleSensor(const String &line) {
-  String rest = line;
-  rest.trim();
-  if (rest.length() == 0) {
-    Serial.println(F("Usage: sensor ping [trigger] [echo] | sensor read [echo] | sensor init <trigger> <echo> | sensor list"));
-    return;
+  harixos::api::ApiResult result = harixos::api::SensorAPI::runCommand(line, Serial);
+  if (result.isError()) {
+    Serial.print(F("ERROR: "));
+    Serial.println(result.message);
   }
-
-  int sep = rest.indexOf(' ');
-  String action = sep < 0 ? rest : rest.substring(0, sep);
-  String tail = sep < 0 ? String("") : rest.substring(sep + 1);
-  tail.trim();
-
-  if (action.equalsIgnoreCase("init")) {
-    if (tail.length() == 0) {
-      Serial.println(F("Usage: sensor init <trigger_pin> <echo_pin>"));
-      return;
-    }
-    int sep2 = tail.indexOf(' ');
-    String pinStr = (sep2 < 0) ? tail : tail.substring(0, sep2);
-    uint8_t trigger = pinStr.toInt();
-    if (sep2 >= 0) {
-      tail = tail.substring(sep2 + 1);
-      tail.trim();
-      uint8_t echo = tail.toInt();
-      int result = harixos::api::SensorAPI::init(trigger, echo);
-      if (result >= 0) {
-        Serial.printf("Sensor initialized: trigger=%d, echo=%d (instance %d)\r\n", trigger, echo, result);
-      } else {
-        Serial.println(F("Sensor pool full."));
-      }
-    } else {
-      Serial.println(F("Usage: sensor init <trigger_pin> <echo_pin>"));
-    }
-    return;
-  }
-
-  if (action.equalsIgnoreCase("ping")) {
-    uint8_t trigger = 4;
-    uint8_t echo = 5;
-    if (tail.length() > 0) {
-      int sep2 = tail.indexOf(' ');
-      if (sep2 >= 0) {
-        trigger = tail.substring(0, sep2).toInt();
-        tail = tail.substring(sep2 + 1);
-        tail.trim();
-        echo = tail.toInt();
-      } else {
-        trigger = tail.toInt();
-        echo = tail.toInt();
-      }
-    }
-    harixos::api::SensorAPI* sensor = harixos::api::SensorAPI::findByTriggerPin(trigger);
-    if (!sensor) {
-      int result = harixos::api::SensorAPI::init(trigger, echo);
-      if (result >= 0) {
-        sensor = harixos::api::SensorAPI::findByTriggerPin(trigger);
-      }
-    }
-    if (sensor) {
-      int mm = sensor->readDistanceMm();
-      if (mm > 0) {
-        Serial.printf("Distance: %d mm (%.2f cm, %.3f m)\r\n", mm, sensor->readDistanceCm(), sensor->readDistanceM());
-      } else {
-        Serial.println(F("No object detected or timeout."));
-      }
-    } else {
-      Serial.println(F("Sensor not found. Initialize with: sensor init <trigger> <echo>"));
-    }
-    return;
-  }
-
-  if (action.equalsIgnoreCase("read")) {
-    uint8_t echoPin = 5;
-    if (tail.length() > 0) {
-      echoPin = tail.toInt();
-    }
-    harixos::api::SensorAPI* sensor = harixos::api::SensorAPI::findByEchoPin(echoPin);
-    if (sensor) {
-      int mm = sensor->readDistanceMm();
-      if (mm > 0) {
-        Serial.printf("Distance: %d mm\r\n", mm);
-        Serial.printf("Object detected: %s\r\n", sensor->hasObject() ? "yes" : "no");
-      } else {
-        Serial.println(F("No object detected or timeout."));
-      }
-    } else {
-      Serial.println(F("Sensor not found."));
-    }
-    return;
-  }
-
-  if (action.equalsIgnoreCase("list")) {
-    harixos::api::SensorAPI::listAll(Serial);
-    return;
-  }
-
-  Serial.println(F("Unknown sensor action. Use: ping, read, init, list"));
 }
 
 void handleServo(const String &line) {
-  String rest = line;
-  rest.trim();
-  if (rest.length() == 0) {
-    Serial.println(F("Usage: servo write <pin> <angle> | servo attach <pin> | servo detach <pin> | servo read <pin> | servo list"));
-    return;
+  harixos::api::ApiResult result = harixos::api::ServoAPI::runCommand(line, Serial);
+  if (result.isError()) {
+    Serial.print(F("ERROR: "));
+    Serial.println(result.message);
   }
-
-  int sep = rest.indexOf(' ');
-  String action = sep < 0 ? rest : rest.substring(0, sep);
-  String tail = sep < 0 ? String("") : rest.substring(sep + 1);
-  tail.trim();
-
-  if (action.equalsIgnoreCase("attach")) {
-    if (tail.length() == 0) {
-      Serial.println(F("Usage: servo attach <pin>"));
-      return;
-    }
-    uint8_t pin = tail.toInt();
-    int result = harixos::api::ServoAPI::attach(pin);
-    if (result >= 0) {
-      Serial.printf("Servo attached to GPIO%d (instance %d)\r\n", pin, result);
-    } else {
-      Serial.println(F("Servo pool full."));
-    }
-    return;
-  }
-
-  if (action.equalsIgnoreCase("detach")) {
-    if (tail.length() == 0) {
-      Serial.println(F("Usage: servo detach <pin>"));
-      return;
-    }
-    uint8_t pin = tail.toInt();
-    int result = harixos::api::ServoAPI::detach(pin);
-    if (result >= 0) {
-      Serial.printf("Servo detached from GPIO%d\r\n", pin);
-    } else {
-      Serial.println(F("Servo not found."));
-    }
-    return;
-  }
-
-  if (action.equalsIgnoreCase("write")) {
-    if (tail.length() == 0) {
-      Serial.println(F("Usage: servo write <pin> <angle>"));
-      return;
-    }
-    int sep2 = tail.indexOf(' ');
-    uint8_t pin = (sep2 < 0) ? tail.toInt() : tail.substring(0, sep2).toInt();
-    uint8_t angle = (sep2 < 0) ? 90 : tail.substring(sep2 + 1).toInt();
-    if (angle > 180) angle = 180;
-
-    harixos::api::ServoAPI* servo = harixos::api::ServoAPI::findByPin(pin);
-    if (!servo) {
-      int result = harixos::api::ServoAPI::attach(pin);
-      if (result >= 0) {
-        servo = harixos::api::ServoAPI::findByPin(pin);
-      }
-    }
-    if (servo) {
-      servo->writeAngle(angle);
-      Serial.printf("Servo GPIO%d -> %d degrees\r\n", pin, angle);
-    } else {
-      Serial.println(F("Servo not found."));
-    }
-    return;
-  }
-
-  if (action.equalsIgnoreCase("read")) {
-    if (tail.length() == 0) {
-      Serial.println(F("Usage: servo read <pin>"));
-      return;
-    }
-    uint8_t pin = tail.toInt();
-    harixos::api::ServoAPI* servo = harixos::api::ServoAPI::findByPin(pin);
-    if (servo) {
-      Serial.printf("Servo GPIO%d: %d degrees\r\n", pin, servo->readAngle());
-    } else {
-      Serial.println(F("Servo not found."));
-    }
-    return;
-  }
-
-  if (action.equalsIgnoreCase("list")) {
-    harixos::api::ServoAPI::listAll(Serial);
-    return;
-  }
-
-  Serial.println(F("Unknown servo action. Use: attach, detach, write, read, list"));
 }
 
 void handleMotor(const String &line) {
-  String rest = line;
-  rest.trim();
-  if (rest.length() == 0) {
-    Serial.println(F("Usage: motor init|forward|reverse|stop|brake|speed|list"));
-    return;
+  harixos::api::ApiResult result = harixos::api::MotorAPI::runCommand(line, Serial);
+  if (result.isError()) {
+    Serial.print(F("ERROR: "));
+    Serial.println(result.message);
   }
+}
 
-  int sep = rest.indexOf(' ');
-  String action = sep < 0 ? rest : rest.substring(0, sep);
-  String tail = sep < 0 ? String("") : rest.substring(sep + 1);
-  tail.trim();
-
-  if (action.equalsIgnoreCase("init")) {
-    if (tail.length() == 0) {
-      Serial.println(F("Usage: motor init [m1|m2] [name_pin] [speed_pin]"));
-      Serial.println(F("  M1: name=GPIO14(D5), speed=GPIO12(D6)"));
-      Serial.println(F("  M2: name=GPIO13(D7), speed=GPIO5(D1)"));
-      return;
-    }
-    String motorName = tail;
-    uint8_t namePin, speedPin;
-
-    if (motorName == F("m1") || motorName == F("0")) {
-      namePin = 14; speedPin = 12;
-    } else if (motorName == F("m2") || motorName == F("1")) {
-      namePin = 13; speedPin = 5;
-    } else {
-      namePin = tail.toInt();
-      sep = tail.indexOf(' ');
-      if (sep >= 0) speedPin = tail.substring(sep + 1).toInt();
-      else speedPin = 12;
-    }
-
-    uint8_t index = (motorName == F("m1") || motorName == F("0")) ? 0 : 1;
-    int result = harixos::api::MotorAPI::init(index, namePin, speedPin);
-    if (result >= 0) {
-      Serial.printf("Motor %s initialized (GPIO%d name, GPIO%d speed)\r\n",
-                    motorName.c_str(), namePin, speedPin);
-    } else {
-      Serial.println(F("Motor pool full."));
-    }
-    return;
+void handleVars(const String &line) {
+  const char *err = harixos::api::vars::runCommand(
+      line.c_str(),
+      [](const char *outLine, void *stream) {
+        static_cast<Stream *>(stream)->println(outLine);
+      },
+      &Serial);
+  if (err != nullptr) {
+    Serial.println(err);
   }
-
-  if (action.equalsIgnoreCase("forward")) {
-    if (tail.length() == 0) {
-      harixos::api::MotorAPI::findByIndex(0)->forward();
-      harixos::api::MotorAPI::findByIndex(1)->forward();
-      Serial.println(F("All motors forward."));
-    } else if (tail == F("m1") || tail == F("0")) {
-      harixos::api::MotorAPI::findByIndex(0)->forward();
-      Serial.println(F("Motor M1 forward."));
-    } else if (tail == F("m2") || tail == F("1")) {
-      harixos::api::MotorAPI::findByIndex(1)->forward();
-      Serial.println(F("Motor M2 forward."));
-    } else {
-      uint8_t idx = tail.toInt();
-      harixos::api::MotorAPI::findByIndex(idx)->forward();
-      Serial.printf("Motor %d forward.\r\n", idx);
-    }
-    return;
-  }
-
-  if (action.equalsIgnoreCase("reverse")) {
-    if (tail.length() == 0) {
-      harixos::api::MotorAPI::findByIndex(0)->reverse();
-      harixos::api::MotorAPI::findByIndex(1)->reverse();
-      Serial.println(F("All motors reverse."));
-    } else if (tail == F("m1") || tail == F("0")) {
-      harixos::api::MotorAPI::findByIndex(0)->reverse();
-      Serial.println(F("Motor M1 reverse."));
-    } else if (tail == F("m2") || tail == F("1")) {
-      harixos::api::MotorAPI::findByIndex(1)->reverse();
-      Serial.println(F("Motor M2 reverse."));
-    } else {
-      uint8_t idx = tail.toInt();
-      harixos::api::MotorAPI::findByIndex(idx)->reverse();
-      Serial.printf("Motor %d reverse.\r\n", idx);
-    }
-    return;
-  }
-
-  if (action.equalsIgnoreCase("stop")) {
-    if (tail.length() == 0) {
-      harixos::api::MotorAPI::findByIndex(0)->stop();
-      harixos::api::MotorAPI::findByIndex(1)->stop();
-      Serial.println(F("All motors stopped."));
-    } else if (tail == F("m1") || tail == F("0")) {
-      harixos::api::MotorAPI::findByIndex(0)->stop();
-      Serial.println(F("Motor M1 stopped."));
-    } else if (tail == F("m2") || tail == F("1")) {
-      harixos::api::MotorAPI::findByIndex(1)->stop();
-      Serial.println(F("Motor M2 stopped."));
-    } else {
-      uint8_t idx = tail.toInt();
-      harixos::api::MotorAPI::findByIndex(idx)->stop();
-      Serial.printf("Motor %d stopped.\r\n", idx);
-    }
-    return;
-  }
-
-  if (action.equalsIgnoreCase("brake") || action.equalsIgnoreCase("brake")) {
-    if (tail.length() == 0) {
-      harixos::api::MotorAPI::findByIndex(0)->brake();
-      harixos::api::MotorAPI::findByIndex(1)->brake();
-      Serial.println(F("All motors braked."));
-    } else if (tail == F("m1") || tail == F("0")) {
-      harixos::api::MotorAPI::findByIndex(0)->brake();
-      Serial.println(F("Motor M1 braked."));
-    } else if (tail == F("m2") || tail == F("1")) {
-      harixos::api::MotorAPI::findByIndex(1)->brake();
-      Serial.println(F("Motor M2 braked."));
-    } else {
-      uint8_t idx = tail.toInt();
-      harixos::api::MotorAPI::findByIndex(idx)->brake();
-      Serial.printf("Motor %d braked.\r\n", idx);
-    }
-    return;
-  }
-
-  if (action.equalsIgnoreCase("speed") || action.equalsIgnoreCase("spd")) {
-    if (tail.length() == 0) {
-      Serial.println(F("Usage: motor speed <0-100> [m1|m2]"));
-      return;
-    }
-    int sep2 = tail.indexOf(' ');
-    uint8_t speed = tail.toInt();
-    String motorName = (sep2 >= 0) ? tail.substring(sep2 + 1) : String("");
-
-    if (motorName == F("m1") || motorName == F("0")) {
-      harixos::api::MotorAPI::findByIndex(0)->setSpeed(speed);
-      Serial.printf("Motor M1 speed: %d%%\r\n", speed);
-    } else if (motorName == F("m2") || motorName == F("1")) {
-      harixos::api::MotorAPI::findByIndex(1)->setSpeed(speed);
-      Serial.printf("Motor M2 speed: %d%%\r\n", speed);
-    } else {
-      harixos::api::MotorAPI::findByIndex(0)->setSpeed(speed);
-      harixos::api::MotorAPI::findByIndex(1)->setSpeed(speed);
-      Serial.printf("All motors speed: %d%%\r\n", speed);
-    }
-    return;
-  }
-
-  if (action.equalsIgnoreCase("list")) {
-    harixos::api::MotorAPI::listAll(Serial);
-    return;
-  }
-
-  Serial.println(F("Unknown motor action. Use: init, forward, reverse, stop, brake, speed, list"));
 }
 
 }  // namespace

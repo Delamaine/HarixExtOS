@@ -9,10 +9,9 @@ Files
 - [Filesystem.md](Filesystem.md) — Deep guide for LittleFS, `fs` commands and examples
 - [Notepad.md](Notepad.md) — How to use the interactive `notepad` app
 - [Apps.md](Apps.md) — How to add and organize apps under `src/apps/`
-- [Version-1.0.md](Version-1.0.md) — Comprehensive v1.0 release details and new features
 - [API.md](API.md) — Building apps with the HarixOS API
+- [ha-mqtt.md](ha-mqtt.md) — MQTT service, Home Assistant discovery, onchange rules
 - [Troubleshooting.md](Troubleshooting.md) — Common issues and fixes
-- [ROADMAP.md](ROADMAP.md) — Development roadmap and future plans
 
 ---
 

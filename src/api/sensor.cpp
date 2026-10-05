@@ -116,5 +116,101 @@ bool SensorAPI::hasObject(int maxDistanceMm) {
   return (mm > 0 && mm <= maxDistanceMm);
 }
 
+ApiResult SensorAPI::runCommand(const String &args, Stream &out) {
+  String rest = args;
+  rest.trim();
+  if (rest.length() == 0) {
+    return ApiResult(API_INVALID_ARGUMENT,
+                     "Usage: sensor ping [trigger] [echo] | sensor read [echo] | "
+                     "sensor init <trigger> <echo> | sensor list");
+  }
+
+  int sep = rest.indexOf(' ');
+  String action = sep < 0 ? rest : rest.substring(0, sep);
+  String tail = sep < 0 ? String("") : rest.substring(sep + 1);
+  tail.trim();
+
+  if (action.equalsIgnoreCase("init")) {
+    if (tail.length() == 0) {
+      return ApiResult(API_INVALID_ARGUMENT, "Usage: sensor init <trigger_pin> <echo_pin>");
+    }
+    int sep2 = tail.indexOf(' ');
+    if (sep2 < 0) {
+      return ApiResult(API_INVALID_ARGUMENT, "Usage: sensor init <trigger_pin> <echo_pin>");
+    }
+    uint8_t trigger = tail.substring(0, sep2).toInt();
+    tail = tail.substring(sep2 + 1);
+    tail.trim();
+    uint8_t echo = tail.toInt();
+    int result = init(trigger, echo);
+    if (result < 0) {
+      return ApiResult(API_ERROR, "Sensor pool full.");
+    }
+    out.printf("Sensor initialized: trigger=%d, echo=%d (instance %d)\r\n",
+               trigger, echo, result);
+    return ApiResult(API_OK, "");
+  }
+
+  if (action.equalsIgnoreCase("ping")) {
+    uint8_t trigger = 4;
+    uint8_t echo = 5;
+    if (tail.length() > 0) {
+      int sep2 = tail.indexOf(' ');
+      if (sep2 >= 0) {
+        trigger = tail.substring(0, sep2).toInt();
+        tail = tail.substring(sep2 + 1);
+        tail.trim();
+        echo = tail.toInt();
+      } else {
+        trigger = tail.toInt();
+        echo = tail.toInt();
+      }
+    }
+    SensorAPI *sensor = findByTriggerPin(trigger);
+    if (!sensor && init(trigger, echo) >= 0) {
+      sensor = findByTriggerPin(trigger);
+    }
+    if (!sensor) {
+      return ApiResult(
+          API_ERROR, "Sensor not found. Initialize with: sensor init <trigger> <echo>");
+    }
+    int mm = sensor->readDistanceMm();
+    if (mm > 0) {
+      out.printf("Distance: %d mm (%.2f cm, %.3f m)\r\n", mm,
+                 sensor->readDistanceCm(), sensor->readDistanceM());
+    } else {
+      out.println(F("No object detected or timeout."));
+    }
+    return ApiResult(API_OK, "");
+  }
+
+  if (action.equalsIgnoreCase("read")) {
+    uint8_t echoPin = 5;
+    if (tail.length() > 0) {
+      echoPin = tail.toInt();
+    }
+    SensorAPI *sensor = findByEchoPin(echoPin);
+    if (!sensor) {
+      return ApiResult(API_ERROR, "Sensor not found.");
+    }
+    int mm = sensor->readDistanceMm();
+    if (mm > 0) {
+      out.printf("Distance: %d mm\r\n", mm);
+      out.printf("Object detected: %s\r\n", sensor->hasObject() ? "yes" : "no");
+    } else {
+      out.println(F("No object detected or timeout."));
+    }
+    return ApiResult(API_OK, "");
+  }
+
+  if (action.equalsIgnoreCase("list")) {
+    listAll(out);
+    return ApiResult(API_OK, "");
+  }
+
+  return ApiResult(API_INVALID_ARGUMENT,
+                   "Unknown sensor action. Use: ping, read, init, list");
+}
+
 }  // namespace api
 }  // namespace harixos

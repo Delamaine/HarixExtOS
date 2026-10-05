@@ -6,6 +6,10 @@
 #include "wifi_api.h"
 #include "system_api.h"
 #include "tz_mapping.h"
+#include "servo.h"
+#include "sensor.h"
+#include "motor.h"
+#include "vars.h"
 #include "../apps/settings/settings.h"
 #include "../kernel/filesystem/filesystem.h"
 #include "../kernel/iot/mqtt_service.h"
@@ -562,8 +566,26 @@ ApiResult ScriptEngine::executeCommand(const String &command, Stream &output) {
   } else if (cmd.name == "settings" || cmd.name == "time" ||
              cmd.name == "reboot") {
     return handleSettingsTimeCommand(cmd.name, cmd.args, output);
-  } else if (cmd.name == "post" || cmd.name == "mqtt") {
+  } else if (cmd.name == "vars") {
+    const char *err = vars::runCommand(
+        cmd.args.c_str(),
+        [](const char *line, void *stream) {
+          static_cast<Stream *>(stream)->println(line);
+        },
+        &output);
+    if (err != nullptr) {
+      return ApiResult(API_INVALID_ARGUMENT, err);
+    }
+    return ApiResult(API_OK, "");
+  } else if (cmd.name == "post" || cmd.name == "mqtt" ||
+             cmd.name == "onchange") {
     return handleIotCommand(cmd.name, cmd.args, output);
+  } else if (cmd.name == "servo") {
+    return ServoAPI::runCommand(cmd.args, output);
+  } else if (cmd.name == "sensor") {
+    return SensorAPI::runCommand(cmd.args, output);
+  } else if (cmd.name == "motor") {
+    return MotorAPI::runCommand(cmd.args, output);
   } else if (cmd.name.startsWith("/") || cmd.name.endsWith(".hx")) {
     // Treat as script path if it looks like one
     return handleRunCommand(command, output);
@@ -765,10 +787,17 @@ void ScriptEngine::printHelp(Stream &output) {
   output.println();
   output.println(F("IoT:"));
   output.println(F("  post <url> <body> [ctype]  HTTP POST webhook"));
-  output.println(F("  mqtt status|start|stop|pub <topic> <payload>  MQTT service"));
+  output.println(F("  mqtt status|start|stop|on|off|pub <topic> <payload>  MQTT service"));
+  output.println(F("  onchange add|remove|list [args]  GPIO onchange rules"));
+  output.println();
+  output.println(F("Drivers:"));
+  output.println(F("  servo attach|detach|write <pin> <angle>|read <pin>|list"));
+  output.println(F("  sensor init <trigger> <echo>|ping [trigger] [echo]|read [echo]|list"));
+  output.println(F("  motor init|forward|reverse|stop|brake|speed <0-100>|list"));
   output.println();
   output.println(F("Other:"));
   output.println(F("  set <name> = <expr>     Assign a variable"));
+  output.println(F("  vars list|set|get|del|save|load|clear  Global variable store"));
   output.println(F("  if/else/end             Conditional blocks"));
   output.println(F("  while <cond>/end        Loop while condition is true"));
   output.println(F("  break                   Exit innermost while loop"));

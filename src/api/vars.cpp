@@ -1,10 +1,15 @@
 #include "vars.h"
 
+#ifdef ARDUINO
 #include <Arduino.h>
 #include <FS.h>
 #include <LittleFS.h>
+#endif
+#include <cctype>
 #include <cstring>
 #include <cstdio>
+
+#include "expr.h"
 
 namespace harixos {
 namespace api {
@@ -143,7 +148,7 @@ ValueType typeAt(size_t index) {
   return slots[index].type;
 }
 
-void listValues(void (*printer)(const char *line)) {
+void listValues(void (*printer)(const char *line, void *ctx), void *ctx) {
   if (!printer) return;
   for (size_t i = 0; i < kMaxVars; ++i) {
     if (slots[i].used) {
@@ -153,10 +158,12 @@ void listValues(void (*printer)(const char *line)) {
       } else {
         snprintf(buf, sizeof(buf), "%s=%.10g", slots[i].name, slots[i].value);
       }
-      printer(buf);
+      printer(buf, ctx);
     }
   }
 }
+
+#ifdef ARDUINO
 
 bool save(const char *path) {
   if (path == nullptr || path[0] == '\0') return false;
@@ -220,6 +227,13 @@ bool load(const char *path) {
   return true;
 }
 
+#else  // !ARDUINO — host builds have no filesystem
+
+bool save(const char *path) { (void)path; return false; }
+bool load(const char *path) { (void)path; return false; }
+
+#endif  // ARDUINO
+
 void clearAll() {
   clear();
 }
@@ -234,6 +248,130 @@ bool delByName(const char *name) {
   slots[idx].valueStr[0] = '\0';
   slots[idx].type = ValueType::kNumber;
   return true;
+}
+
+namespace {
+const char kUsage[] =
+    "Usage: vars [list|set|get|del|save|load|clear] [args...]";
+const char kUnknownAction[] =
+    "Unknown vars action: list, set, get, del, save, load, clear";
+char g_errorBuf[96];
+
+bool ieq(const char *a, const char *b) {
+  while (*a != '\0' && *b != '\0') {
+    if (tolower((unsigned char)*a) != tolower((unsigned char)*b)) return false;
+    ++a;
+    ++b;
+  }
+  return *a == '\0' && *b == '\0';
+}
+
+// Copies `in` into `out`, dropping leading and trailing whitespace.
+void copyTrimmed(char *out, size_t cap, const char *in) {
+  while (*in == ' ' || *in == '\t') ++in;
+  size_t len = strlen(in);
+  while (len > 0 && (in[len - 1] == ' ' || in[len - 1] == '\t')) --len;
+  if (len >= cap) len = cap - 1;
+  memcpy(out, in, len);
+  out[len] = '\0';
+}
+}  // namespace
+
+const char *runCommand(const char *args,
+                       void (*emit)(const char *line, void *ctx), void *ctx) {
+  if (emit == nullptr || args == nullptr) return kUsage;
+
+  while (*args == ' ' || *args == '\t') ++args;
+  if (*args == '\0') return kUsage;
+
+  // Split into the action word and the (space-skipped) remainder.
+  const char *sep = strchr(args, ' ');
+  const char *rest = (sep != nullptr) ? sep : args + strlen(args);
+  while (*rest == ' ' || *rest == '\t') ++rest;
+
+  char action[kMaxNameLength + 1];
+  size_t actionLen = (sep != nullptr) ? (size_t)(sep - args) : strlen(args);
+  if (actionLen >= sizeof(action)) actionLen = sizeof(action) - 1;
+  memcpy(action, args, actionLen);
+  action[actionLen] = '\0';
+
+  char text[256];
+
+  if (ieq(action, "list")) {
+    emit("Variables:", ctx);
+    listValues(emit, ctx);
+    snprintf(text, sizeof(text), "Count: %zu/%zu", count(), kMaxVars);
+    emit(text, ctx);
+    return nullptr;
+  }
+
+  if (ieq(action, "set")) {
+    if (*rest == '\0') return "Usage: vars set <name>=<value>";
+    copyTrimmed(text, sizeof(text), rest);
+    double value = 0;
+    const char *err = expr::assign(text, &value);
+    if (err != nullptr) return err;
+    char name[kMaxNameLength + 1];
+    const char *expression = nullptr;
+    if (!expr::parseSet(text, name, sizeof(name), &expression)) {
+      return "Usage: vars set <name>=<value>";
+    }
+    snprintf(text, sizeof(text), "%s = %.10g", name, value);
+    emit(text, ctx);
+    return nullptr;
+  }
+
+  if (ieq(action, "get")) {
+    if (*rest == '\0') return "Usage: vars get <name>";
+    char name[kMaxNameLength + 1];
+    copyTrimmed(name, sizeof(name), rest);
+    double v = 0;
+    if (get(name, v)) {
+      char line[kMaxNameLength + 32];
+      snprintf(line, sizeof(line), "%s = %.10g", name, v);
+      emit(line, ctx);
+      return nullptr;
+    }
+    snprintf(g_errorBuf, sizeof(g_errorBuf), "%s not found.", name);
+    return g_errorBuf;
+  }
+
+  if (ieq(action, "del") || ieq(action, "delete")) {
+    if (*rest == '\0') return "Usage: vars del <name>";
+    copyTrimmed(text, sizeof(text), rest);
+    if (delByName(text)) {
+      snprintf(g_errorBuf, sizeof(g_errorBuf), "%s deleted.", text);
+      emit(g_errorBuf, ctx);
+      return nullptr;
+    }
+    snprintf(g_errorBuf, sizeof(g_errorBuf), "%s not found.", text);
+    return g_errorBuf;
+  }
+
+  if (ieq(action, "save")) {
+    if (save(kPersistPath)) {
+      emit("Variables saved.", ctx);
+      return nullptr;
+    }
+    return "Failed to save variables.";
+  }
+
+  if (ieq(action, "load")) {
+    if (load(kPersistPath)) {
+      snprintf(text, sizeof(text), "Variables loaded (%zu).", count());
+      emit(text, ctx);
+      return nullptr;
+    }
+    return "No variables to load.";
+  }
+
+  if (ieq(action, "clear")) {
+    clear();
+    emit("All variables cleared.", ctx);
+    return nullptr;
+  }
+
+  return kUnknownAction;
 }
 
 }  // namespace vars

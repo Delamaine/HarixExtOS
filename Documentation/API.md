@@ -146,14 +146,13 @@ SystemAPI::reboot();
 #include "api/servo.h"
 using namespace harixos::api;
 
-// Attach servo to a GPIO pin
+// Attach servo to a GPIO pin (returns instance id, -1 if pool full)
 int instance = ServoAPI::attach(4);
 
-// Write angle (0-180 degrees)
-ServoAPI::writeAngle(90);
-
-// Read current angle
-uint8_t angle = ServoAPI::readAngle();
+// Look the instance up, then drive it — angle methods are instance methods
+ServoAPI *servo = ServoAPI::findByPin(4);
+servo->writeAngle(90);        // 0-180 degrees
+uint8_t angle = servo->readAngle();
 
 // Detach servo
 ServoAPI::detach(4);
@@ -178,17 +177,12 @@ using namespace harixos::api;
 // Initialize sensor with trigger and echo pins
 SensorAPI::init(4, 5);  // trigger=GPIO4, echo=GPIO5
 
-// Read distance in millimeters
-int mm = SensorAPI::readDistanceMm();
-
-// Read distance in centimeters
-float cm = SensorAPI::readDistanceCm();
-
-// Read distance in meters
-float m = SensorAPI::readDistanceM();
-
-// Check if object is within max distance
-bool detected = SensorAPI::hasObject(5000);  // 5m max
+// Readings are instance methods
+SensorAPI *sensor = SensorAPI::findByTriggerPin(4);
+int mm = sensor->readDistanceMm();   // blocking
+float cm = sensor->readDistanceCm();
+float m = sensor->readDistanceM();
+bool detected = sensor->hasObject(5000);  // 5m max
 
 // List all sensors
 SensorAPI::listAll(Serial);
@@ -211,25 +205,26 @@ using namespace harixos::api;
 MotorAPI::init(0, 14, 12);  // M1: name=GPIO14(D5), speed=GPIO12(D6)
 MotorAPI::init(1, 13, 5);   // M2: name=GPIO13(D7), speed=GPIO5(D1)
 
-// Direction control
-MotorAPI::forward();   // All motors forward
-MotorAPI::reverse();   // All motors reverse
-MotorAPI::stop();      // All motors stop (coast)
-MotorAPI::brake();     // All motors brake (stop quickly)
+// init/list are static; direction and speed are instance methods
+MotorAPI *m1 = MotorAPI::findByIndex(0);   // nullptr if not initialized
+m1->forward();
+m1->reverse();
+m1->stop();      // coast
+m1->brake();     // stop quickly
 
 // Speed control (0-100%)
-MotorAPI::setSpeed(75);
-uint8_t speed = MotorAPI::getSpeed();
+m1->setSpeed(75);
+uint8_t speed = m1->getSpeed();
 
 // Combined speed and direction
-MotorAPI::setSpeedDirection(50, FORWARD);
+m1->setSpeedDirection(50, MotorAPI::FORWARD);
 
 // Acceleration/deceleration
-MotorAPI::accelerate(100, 1000);  // 0->100% in 1s
-MotorAPI::decelerate(50, 500);    // decelerate to 50% in 0.5s
+m1->accelerate(100, 1000);  // 0->100% in 1s
+m1->decelerate(50, 500);    // decelerate to 50% in 0.5s
 
 // Run for specified duration then stop
-MotorAPI::runFor(75, FORWARD, 2000);  // 75% forward for 2 seconds
+m1->runFor(75, MotorAPI::FORWARD, 2000);  // 75% forward for 2 seconds
 
 // List all motors
 MotorAPI::listAll(Serial);

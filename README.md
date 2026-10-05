@@ -149,14 +149,12 @@ HarixOS> run uninstall myapp
 
 **API & Apps:**
 - **API Reference**: [Documentation/API.md](Documentation/API.md) — Building apps with HarixOS API
-- **Advanced Applications**: [Documentation/Advanced-Apps.md](Documentation/Advanced-Apps.md) — Complex app development guide
-- **API Robustness**: [Documentation/API-Robustness.md](Documentation/API-Robustness.md) — Safety and error handling
-- **Development Roadmap**: [Documentation/ROADMAP.md](Documentation/ROADMAP.md) — Future features and planned enhancements
 
 **User Guides:**
 - **Getting Started**: [Documentation/Getting-Started.md](Documentation/Getting-Started.md)
 - **Commands Reference**: [Documentation/Commands.md](Documentation/Commands.md)
 - **Script Reference**: [SCRIPT-REFERENCE.md](SCRIPT-REFERENCE.md) — Quick .hx command reference
+- **MQTT & Home Assistant**: [Documentation/ha-mqtt.md](Documentation/ha-mqtt.md) — MQTT topics, discovery, onchange rules
 - **Filesystem Guide**: [Documentation/Filesystem.md](Documentation/Filesystem.md)
 - **Notepad Guide**: [Documentation/Notepad.md](Documentation/Notepad.md)
 - **Apps Guide**: [Documentation/Apps.md](Documentation/Apps.md)

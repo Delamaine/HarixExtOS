@@ -10,7 +10,9 @@ Device fails to boot
 - If serial logs show `rst:0x10`, the chip was in deep sleep; power-cycle the module.
 
 Filesystem problems
-- If files not visible or corrupted, reformat with `format`.
+- If files are not visible or corrupted there is no `format` command;
+  erase the chip (`python -m platformio run -e nodemcuv2 -t erase`) and
+  flash the firmware again to start with an empty LittleFS.
 - Use `ls` to verify the structure.
 
 Serial garbled output

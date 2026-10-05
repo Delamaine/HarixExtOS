@@ -8,7 +8,9 @@ Path semantics
 - `.` and `..` are supported.
 
 Common workflows
-- Format storage: `format` — WARNING: erases all files.
+- Wipe storage: there is no `format`/`fs format` shell command — erase the
+  chip with `python -m platformio run -e nodemcuv2 -t erase`, then flash the
+  firmware again (the filesystem is recreated empty on first boot).
 - List root: `ls /`
 - Create nested directories: `mkdir /notes/2026`
 - Move files: `mv /tmp/a.txt /notes/a.txt`

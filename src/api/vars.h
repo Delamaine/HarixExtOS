@@ -27,11 +27,19 @@ size_t count();
 const char *nameAt(size_t index);           // "" for an unused slot
 double valueAt(size_t index);
 ValueType typeAt(size_t index);             // numeric or string type
-void listValues(void (*printer)(const char *line));
+void listValues(void (*printer)(const char *line, void *ctx), void *ctx);
 bool save(const char *path);                // persist to LittleFS
 bool load(const char *path);                // restore from LittleFS
 void clearAll();                            // clear all vars and reset types
-bool delByName(const char *name);            // delete a variable by name
+bool delByName(const char *name);           // delete a variable by name
+
+// Run a `vars` subcommand ("list", "set <name>=<value>", "get <name>",
+// "del <name>", "save", "load", "clear"). Emits output lines through
+// `emit(line, ctx)` and returns nullptr on success, or a message to report
+// as an error. The context pointer lets any caller (console, MQTT capture,
+// tests) bind its own sink without Arduino types.
+const char *runCommand(const char *args,
+                       void (*emit)(const char *line, void *ctx), void *ctx);
 
 }  // namespace vars
 }  // namespace api
