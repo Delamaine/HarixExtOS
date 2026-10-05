@@ -1809,6 +1809,13 @@ void handleSchedule(const String &line) {
   Serial.println(F("Unknown schedule action."));
 }
 
+// ponytail: advertised help topics are hand-maintained here. Add a new
+// `else if (topic == F(...))` block in handleHelp AND list the topic in
+// kHelpTopics, or `help <topic>` advertises a dead topic. If this list ever
+// drifts, convert handleHelp's if/else chain to a table keyed on kHelpTopics.
+static const char* const kHelpTopics =
+    "wifi|gpio|i2c|fs|serve|post|mqtt|onchange|time|schedule|update|sensor|servo|motor|run|calc|set|vars|settings|powerprofile|cpufreq";
+
 void handleHelp(const TokenizedLine &cmd) {
   if (cmd.count == 1) {
     Serial.println(F("HarixOS command shell"));
@@ -1869,7 +1876,7 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  vars ...             Variable storage (vars list|set|get|del|save|load|clear)"));
     Serial.println();
     Serial.println(F("Help topics:"));
-    Serial.println(F("  help wifi|gpio|fs|serve|time|schedule|update|sensor|servo|mqtt|onchange  Show topic help"));
+    Serial.println(F("  help ") + String(kHelpTopics) + F("  Show topic help"));
     return;
   }
 
@@ -2003,6 +2010,52 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  onchange remove <pin>  Remove onchange rule"));
     Serial.println(F("  onchange list          List all onchange rules"));
     Serial.println(F("      Pins accept 'D5' or '5'. Rules persist across reboots."));
+  } else if (topic == F("vars")) {
+    Serial.println(F("Variable storage (persistent across reboots):"));
+    Serial.println(F("  vars list              List all stored variables"));
+    Serial.println(F("  vars set <name> <expr> Store a variable"));
+    Serial.println(F("  vars get <name>        Print a variable's value"));
+    Serial.println(F("  vars del <name>        Delete a variable"));
+    Serial.println(F("  vars save              Write variables to flash"));
+    Serial.println(F("  vars load              Reload variables from flash"));
+    Serial.println(F("  vars clear             Delete all variables"));
+  } else if (topic == F("post")) {
+    Serial.println(F("HTTP webhook POST:"));
+    Serial.println(F("  post <url> <body> [content-type]"));
+    Serial.println(F("  Default content-type is application/json."));
+  } else if (topic == F("settings")) {
+    Serial.println(F("Device settings:"));
+    Serial.println(F("  settings show          Print current settings"));
+    Serial.println(F("  settings banner on|off  Toggle startup banner"));
+    Serial.println(F("  settings timezone <tz> Set timezone (IANA, UTC, or POSIX)"));
+    Serial.println(F("  settings update on|off  Toggle auto-update check"));
+    Serial.println(F("  settings save          Persist settings to flash"));
+    Serial.println(F("  settings reload        Reload settings from flash"));
+  } else if (topic == F("run")) {
+    Serial.println(F(".hx app manager:"));
+    Serial.println(F("  run list               List installed apps"));
+    Serial.println(F("  run install <name>     Install an app (reads from serial)"));
+    Serial.println(F("  run <name>             Run an installed app"));
+    Serial.println(F("  run uninstall <name>   Remove an app"));
+  } else if (topic == F("calc")) {
+    Serial.println(F("Arithmetic evaluator:"));
+    Serial.println(F("  calc <expression>      e.g. calc 1+2*(3-4)/5"));
+  } else if (topic == F("set")) {
+    Serial.println(F("Store a variable for use in scripts:"));
+    Serial.println(F("  set <name> = <expr>    e.g. set threshold = 500"));
+    Serial.println(F("  Value persists and can be referenced as $name in scripts."));
+  } else if (topic == F("powerprofile")) {
+    Serial.println(F("Power profile management:"));
+    Serial.println(F("  powerprofile           Show current profile"));
+    Serial.println(F("  powerprofile <profile> Set profile (full|balanced|powersave|minimal|off)"));
+    Serial.println(F("  powerprofile apply     Re-apply saved profile"));
+    Serial.println(F("  powerprofile status    Show profile and CPU frequency"));
+  } else if (topic == F("cpufreq")) {
+    Serial.println(F("CPU frequency management:"));
+    Serial.println(F("  cpufreq                Show current frequency"));
+    Serial.println(F("  cpufreq <40|80>        Set CPU frequency"));
+    Serial.println(F("  cpufreq status         Show current frequency"));
+    Serial.println(F("  Note: 40 MHz is rejected by the ESP8266 SDK."));
   } else {
     Serial.println(F("Unknown help topic."));
   }
