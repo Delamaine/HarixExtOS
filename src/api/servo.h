@@ -44,6 +44,9 @@ public:
   // Find servo by pin
   static ServoAPI* findByPin(uint8_t pin);
 
+  // First attached servo (for telemetry), or nullptr if none attached.
+  static ServoAPI* firstAttached();
+
   // List all attached servos
   static void listAll(Stream &out);
 

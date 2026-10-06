@@ -7,6 +7,10 @@
 #include "../../apps/settings/settings.h"
 #include "../../api/script_engine.h"
 #include "../../api/system_api.h"
+#include "../../api/servo.h"
+#include "../../api/motor.h"
+#include "../../kernel/iot/onchange.h"
+#include "../../kernel/iot/relay.h"
 #include "../../utils/string_stream.h"
 #include "inbound_queue.h"
 
@@ -18,6 +22,9 @@ constexpr uint32_t kMinHeap = 10240;  // refuse to connect below this free heap
 constexpr uint32_t kMinHeapForTelemetry = 8192;  // skip telemetry below this
 constexpr uint16_t kKeepAliveS = 60;
 constexpr uint16_t kSocketTimeoutS = 3;
+
+using harixos::api::ServoAPI;
+using harixos::api::MotorAPI;
 constexpr uint16_t kBufferSize = 1024;
 constexpr uint32_t kBackoffInitialMs = 5000;
 constexpr uint32_t kBackoffMaxMs = 60000;
@@ -80,7 +87,6 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
 
 // Telemetry tick state (Task 6)
 uint32_t lastTelemetryMs = 0;
-bool firstConnect = true;
 bool discoveryPublished = false;
 bool s_scriptActive = false;
 
@@ -204,6 +210,15 @@ String buildTelemetryPayload() {
   payload += String((int)WiFi.RSSI());
   payload += F(",\"adc\":");
   payload += String(analogRead(A0));
+  ServoAPI* servo = ServoAPI::firstAttached();
+  payload += F(",\"servo\":");
+  payload += servo ? String(servo->readAngle()) : String(-1);
+  MotorAPI* m1 = MotorAPI::findByIndex(0);
+  payload += F(",\"m1\":");
+  payload += (m1 && m1->initialized()) ? String(m1->getSpeed()) : String(-1);
+  MotorAPI* m2 = MotorAPI::findByIndex(1);
+  payload += F(",\"m2\":");
+  payload += (m2 && m2->initialized()) ? String(m2->getSpeed()) : String(-1);
   payload += F("}");
   return payload;
 }
@@ -271,7 +286,104 @@ void publishHADiscovery() {
   switchPayload += F("\"}}");
 
   publishRaw(switchConfigTopic, switchPayload, true);
+
+  // Binary sensor configs: one per active onchange pin.
+  String pins = harixos::iot::collectActiveRulePins();
+  size_t start = 0;
+  while (start < pins.length()) {
+    size_t comma = pins.indexOf(',', start);
+    String pin = (comma == (size_t)-1) ? pins.substring(start) : pins.substring(start, comma);
+    pin.trim();
+    if (pin.length() == 0) {
+      if (comma == (size_t)-1) break;
+      start = comma + 1;
+      continue;
+    }
+    String bsTopic = "homeassistant/binary_sensor/";
+    bsTopic += hp;
+    bsTopic += "/";
+    bsTopic += pin;
+    bsTopic += "/config";
+    String bsPayload = String();
+    bsPayload += F("{\"name\":\"");
+    bsPayload += hp;
+    bsPayload += F("_");
+    bsPayload += pin;
+    bsPayload += F("\"");
+    bsPayload += F(",\"state_topic\":\"");
+    bsPayload += prefix;
+    bsPayload += F("/gpio/");
+    bsPayload += pin;
+    bsPayload += F("\"");
+    bsPayload += F(",\"device_class\":\"motion\"");
+    bsPayload += F(",\"uniq_id\":\"");
+    bsPayload += hp;
+    bsPayload += F("_gpio_");
+    bsPayload += pin;
+    bsPayload += F("\"");
+    bsPayload += F(",\"dev\":{\"ids\":\"");
+    bsPayload += hp;
+    bsPayload += F("\"}}");
+    publishRaw(bsTopic, bsPayload, true);
+    if (comma == (size_t)-1) break;
+    start = comma + 1;
+  }
+
+  // Switch configs: one per relay.
+  String names = harixos::iot::collectRelayNames();
+  start = 0;
+  while (start < names.length()) {
+    size_t comma = names.indexOf(',', start);
+    String name = (comma == (size_t)-1) ? names.substring(start) : names.substring(start, comma);
+    name.trim();
+    if (name.length() == 0) {
+      if (comma == (size_t)-1) break;
+      start = comma + 1;
+      continue;
+    }
+    String swTopic = "homeassistant/switch/";
+    swTopic += hp;
+    swTopic += "/";
+    swTopic += name;
+    swTopic += "/config";
+    String swPayload = String();
+    swPayload += F("{\"name\":\"");
+    swPayload += hp;
+    swPayload += F("_");
+    swPayload += name;
+    swPayload += F("\"");
+    swPayload += F(",\"state_topic\":\"");
+    swPayload += prefix;
+    swPayload += F("/relay/");
+    swPayload += name;
+    swPayload += F("/state\"");
+    swPayload += F(",\"command_topic\":\"");
+    swPayload += prefix;
+    swPayload += F("/shell/in\"");
+    swPayload += F(",\"payload_on\":\"relay set ");
+    swPayload += name;
+    swPayload += F(" on\"");
+    swPayload += F(",\"payload_off\":\"relay set ");
+    swPayload += name;
+    swPayload += F(" off\"");
+    swPayload += F(",\"uniq_id\":\"");
+    swPayload += hp;
+    swPayload += F("_relay_");
+    swPayload += name;
+    swPayload += F("\"");
+    swPayload += F(",\"dev\":{\"ids\":\"");
+    swPayload += hp;
+    swPayload += F("\"}}");
+    publishRaw(swTopic, swPayload, true);
+    if (comma == (size_t)-1) break;
+    start = comma + 1;
+  }
+
   discoveryPublished = true;
+}
+
+void invalidateDiscovery() {
+  discoveryPublished = false;
 }
 
 void update() {
@@ -292,11 +404,6 @@ void update() {
     if (!client.connected()) {
       return;
     }
-    // First connect: publish HA discovery then telemetry
-    if (firstConnect) {
-      firstConnect = false;
-      publishHADiscovery();
-    }
     // Subscribe to shell/in (first connect + reconnection)
     if (!subscribed) {
       String topic = shellInTopic();
@@ -307,7 +414,15 @@ void update() {
     availabilityPending = false;
     publishRaw(availabilityTopic(), "online", true);
     publishEnabledState();
+    // Retained latch states must survive reconnects: a level changed while
+    // disconnected was never published, and a fresh boot has no relay state
+    // on the broker at all (HA would show `unknown`).
+    publishRelayStates();
   }
+  // Discovery self-gates on discoveryPublished: publishes on first connect and
+  // re-publishes after any relay/onchange entity is registered at runtime
+  // (invalidateDiscovery). publishHADiscovery checks the flag itself.
+  publishHADiscovery();
   client.loop();
 
   // Drain loop (Task 7): process queued inbound lines through ScriptEngine.

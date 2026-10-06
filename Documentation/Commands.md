@@ -2,7 +2,7 @@ HarixOS Shell Commands
 =======================
 
 Core shell commands
-- `help [topic]` — Show help and command list (`help wifi|gpio|i2c|fs|serve|post|mqtt|onchange|time|schedule|update|sensor|servo|motor|run|calc|set|vars|settings|powerprofile|cpufreq`)
+- `help [topic]` — Show help and command list (`help wifi|gpio|i2c|fs|serve|post|mqtt|onchange|relay|time|schedule|update|sensor|servo|motor|run|calc|set|vars|settings|powerprofile|cpufreq`)
 - `about` — Show version and feature list
 - `info` — Show system, flash and memory information
 - `chip` — Show chip and flash details
@@ -150,10 +150,24 @@ IoT (MQTT / webhooks)
   (content-type defaults to `application/json`)
 
 - `onchange add <pin> <rising|falling|both>` — Register a GPIO edge rule
-  (pin accepts `4` or `D2` style; rules persist to `/onchange.rules`, max 8).
-  Rules are armed but no callback runs on an edge yet — see `ha-mqtt.md`.
+   (pin accepts `4` or `D2` style; rules persist to `/onchange.rules`, max 8).
+   A debounced edge publishes `<mqttPrefix>/gpio/<pin>` = `on`/`off` — see
+   `ha-mqtt.md`.
 - `onchange remove <pin>` — Remove a rule
 - `onchange list` — Show active rules (bare `onchange` lists too)
+
+- `relay add <pin> <name> [on|off]` — Register a relay (initial level
+  optional, defaults to off) and persist to `/relays.conf`.
+- `relay set <name> on|off` — Latch a relay on or off (level holds until
+  changed). Publishes `<mqttPrefix>/relay/<name>/state`.
+- `relay toggle <name>` — Invert a relay's current level.
+- `relay status <name>` — Show the current on/off level for a relay.
+- `relay list` — Show registered relays and their GPIOs (bare `relay` lists too).
+
+  Relays are latched switches: once set, they stay in that state across
+  power loss until changed again. Names are 1-15 chars of `[A-Za-z0-9_-]`
+  (they appear verbatim in MQTT topics). HA `switch` discovery is published
+  automatically when MQTT is enabled — see `ha-mqtt.md`.
 
 Hardware
 - `gpio read <pin>` — Read GPIO

@@ -66,6 +66,15 @@ ServoAPI* ServoAPI::findByPin(uint8_t pin) {
   return nullptr;
 }
 
+ServoAPI* ServoAPI::firstAttached() {
+  for (int i = 0; i < kMaxServos; ++i) {
+    if (inited_[i] && pool_[i].attached_) {
+      return &pool_[i];
+    }
+  }
+  return nullptr;
+}
+
 void ServoAPI::listAll(Stream &out) {
   bool found = false;
   for (int i = 0; i < kMaxServos; ++i) {

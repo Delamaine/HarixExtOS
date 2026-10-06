@@ -14,6 +14,7 @@
 #include "../kernel/filesystem/filesystem.h"
 #include "../kernel/iot/mqtt_service.h"
 #include "../kernel/iot/onchange.h"
+#include "../kernel/iot/relay.h"
 #include "../utils/http/http_downloader.h"
 
 namespace {
@@ -528,6 +529,10 @@ ApiResult ScriptEngine::handleIotCommand(const String &name, const String &args,
     if (result.isError()) return result;
     output.println(result.message);
     return ApiResult(API_OK, "");
+  }
+  if (name == "relay") {
+    // relay set|status|list [args] — shared body with shell
+    return harixos::iot::runCommand(args, output);
   }
   return ApiResult(API_INVALID_ARGUMENT, "Unknown IoT command: " + name);
 }

@@ -77,8 +77,12 @@ mqtt status
 <prefix>/shell/out            ← device publishes command replies
 <prefix>/availability         ← LWT: "online" / "offline" (retained)
 <prefix>/mqtt_enabled         ← HA switch state, retained "on"/"off"
+<prefix>/gpio/<pin>           ← onchange edge state, retained "on"/"off"
+<prefix>/relay/<name>/state   ← relay latched state, retained "on"/"off"
 homeassistant/sensor/<hp>/telemetry/config    ← HA sensor discovery (retained)
 homeassistant/switch/<hp>/mqtt_enabled/config ← HA switch discovery (retained)
+homeassistant/binary_sensor/<hp>/gpio/<pin>/config   ← HA discovery (retained)
+homeassistant/switch/<hp>/relay/<name>/config      ← HA discovery (retained)
 ```
 
 `<prefix>` is `mqtt_prefix` (default `harixos/<chipid>`). In discovery
@@ -116,8 +120,8 @@ mosquitto_pub -t harixos/a590a8/shell/in -m "heap"
 
 - Available: `print`, `gpio`, `wifi`, `delay`, `system`, `heap`, `uptime`,
   `chip`, `info`, `adc`, `calc`, filesystem commands, `settings`, `time`,
-  `reboot`, `run <path>`, `post`, `mqtt`, `onchange`, `servo`, `sensor`,
-  `motor`, `set`, `vars`, `help`, `#` comments, `while`/`if` control flow.
+  `reboot`, `run <path>`, `post`, `mqtt`, `onchange`, `relay`, `servo`,
+  `sensor`, `motor`, `set`, `vars`, `help`, `#` comments, `while`/`if` control flow.
 - **Not** available: `about`, `pull`, `update`, `serve`, `i2c`, `notepad`,
   `schedule`, `powerprofile`, `cpufreq`, `fs`, `cls`, `reset`,
   `run list|install|uninstall`.
@@ -190,8 +194,47 @@ homeassistant/switch/harixos_a590a8/mqtt_enabled/config:
       "command_topic": "harixos/a590a8/shell/in",
       "payload_on": "mqtt on",
       "payload_off": "mqtt off",
-      "uniq_id": "harixos_a590a8_mqtt_enabled",
-      "name": "harixos_a590a8_mqtt_enabled",
+       "uniq_id": "harixos_a590a8_mqtt_enabled",
+       "name": "harixos_a590a8_mqtt_enabled",
+       "dev": { "ids": "harixos_a590a8" }
+     }
+```
+
+### GPIO Edge Sensors (onchange)
+
+For every registered `onchange` rule, HA creates a `binary_sensor` that
+reflects the last debounced edge. State is published to
+`<prefix>/gpio/<pin>` (retained `on`/`off`).
+
+```yaml
+homeassistant/binary_sensor/harixos_a590a8/gpio/4/config:
+  payload: >
+    {
+      "name": "harixos_a590a8_4",
+      "state_topic": "harixos/a590a8/gpio/4",
+      "device_class": "motion",
+      "uniq_id": "harixos_a590a8_gpio_4",
+      "dev": { "ids": "harixos_a590a8" }
+    }
+```
+
+### Relay Switches
+
+For every registered relay, HA creates a `switch`. The command topic is
+`<prefix>/shell/in` with the payload `relay set <name> on` /
+`relay set <name> off`; the state topic is `<prefix>/relay/<name>/state`
+(retained `on`/`off`).
+
+```yaml
+homeassistant/switch/harixos_a590a8/relay/myrelay/config:
+  payload: >
+    {
+      "name": "harixos_a590a8_myrelay",
+      "state_topic": "harixos/a590a8/relay/myrelay/state",
+      "command_topic": "harixos/a590a8/shell/in",
+      "payload_on": "relay set myrelay on",
+      "payload_off": "relay set myrelay off",
+      "uniq_id": "harixos_a590a8_relay_myrelay",
       "dev": { "ids": "harixos_a590a8" }
     }
 ```
@@ -232,6 +275,11 @@ mqtt pub test/hello world
 onchange add 4 rising
 onchange remove 4
 onchange list
+
+# Relay (latched switch)
+relay set <name> on
+relay set <name> off
+relay list
 
 # Servo / sensor / motor
 servo attach 4
@@ -284,17 +332,55 @@ Behaviour of the current implementation:
   and edge mode are persisted (the pin mode itself is re-applied at boot).
 - Rules are saved to `/onchange.rules` on every add/remove and reloaded at
   boot. Maximum 8 concurrent rules.
+- Adding a rule while MQTT is connected re-publishes HA discovery, so a new
+  edge pin appears in HA without a reboot.
 - Rules are evaluated by polling in the main loop with a debounce state
   machine (not an ISR).
-- **Edge callbacks are currently no-ops:** a rule is registered, debounced
-  and persisted, but nothing is published to MQTT and no command line runs
-  on the edge yet. `onchange list` shows what is armed.
+- On a debounced edge the device publishes the new state to
+  `<mqttPrefix>/gpio/<pin>` with payload `on` or `off` (only while MQTT is
+  connected; the publish is skipped otherwise). `onchange list` shows what
+  is armed.
 
 ```bash
 # Arm, inspect, disarm
 onchange add D2 rising
 onchange list
 onchange remove D2
+```
+
+## Relay Commands (latched switches)
+
+```bash
+relay add <pin> <name> [on|off]  # register a relay (initial level optional)
+relay set <name> on|off          # latch on/off; level holds until changed
+relay toggle <name>              # invert the current level
+relay status <name>              # show current level
+relay list                       # show registered relays (bare `relay` lists)
+```
+
+Behaviour of the current implementation:
+
+- Relays are **latched switches**: once set, a relay stays in that state
+  across power loss until it is changed again.
+- Registration persists to `/relays.conf` (maximum 4 relays).
+- On a level change the device publishes the retained state to
+  `<prefix>/relay/<name>/state` with payload `on` or `off`. States are also
+  re-published on every (re)connect, so HA never shows a stale relay after a
+  reboot or a toggle that happened while the broker was unreachable.
+- Relay names are 1-15 chars of `[A-Za-z0-9_-]` — they flow verbatim into
+  MQTT topics and HA entity ids.
+- HA `switch` discovery is published when MQTT connects **and re-published
+  whenever a relay is registered while connected** (`relay add` on a running
+  device appears in HA without a reboot). Removed relays linger in HA until
+  reload — retained discovery is not actively cleaned up.
+
+```bash
+# Register, latch on, toggle, then off
+relay add D6 garage
+relay set garage on
+relay toggle garage
+relay list
+relay set garage off
 ```
 
 ## Example HA Integration YAML

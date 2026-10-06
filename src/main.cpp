@@ -25,6 +25,7 @@
 #include "kernel/filesystem/filesystem.h"
 #include "kernel/iot/mqtt_service.h"
 #include "kernel/iot/onchange.h"
+#include "kernel/iot/relay.h"
 #include "utils/http/http_downloader.h"
 #include "api/app_manager.h"
 #include "api/expr.h"
@@ -355,7 +356,8 @@ void handleAppend(const TokenizedLine &cmd);
 void handleNotepad(const TokenizedLine &cmd);
 void handlePost(const TokenizedLine &cmd);
 void handleMqtt(const String &line);
-void handleOnchange(const String &line);
+  void handleOnchange(const String &line);
+  void handleRelay(const String &line);
 void handleSettings(const TokenizedLine &cmd);
 void handleServe(const TokenizedLine &cmd);
 void handleHttpStop();
@@ -670,6 +672,17 @@ void handleOnchange(const String &line) {
     Serial.println(F("Usage: onchange [add|remove|list] (see 'help onchange')"));
     return;
   }
+  if (result.isError()) {
+    Serial.print(F("ERROR: "));
+  }
+  Serial.println(result.message);
+}
+
+void handleRelay(const String &line) {
+  // Strip the "relay " command word; runCommand expects bare args.
+  String rest = (line.length() > 6) ? line.substring(6) : String();
+  rest.trim();
+  harixos::api::ApiResult result = harixos::iot::runCommand(rest, Serial);
   if (result.isError()) {
     Serial.print(F("ERROR: "));
   }
@@ -1826,7 +1839,7 @@ void handleSchedule(const String &line) {
 // kHelpTopics, or `help <topic>` advertises a dead topic. If this list ever
 // drifts, convert handleHelp's if/else chain to a table keyed on kHelpTopics.
 static const char* const kHelpTopics =
-    "wifi|gpio|i2c|fs|serve|post|mqtt|onchange|time|schedule|update|sensor|servo|motor|run|calc|set|vars|settings|powerprofile|cpufreq";
+    "wifi|gpio|i2c|fs|serve|post|mqtt|onchange|relay|time|schedule|update|sensor|servo|motor|run|calc|set|vars|settings|powerprofile|cpufreq";
 
 void handleHelp(const TokenizedLine &cmd) {
   if (cmd.count == 1) {
@@ -1878,6 +1891,7 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  sensor ...           HC-SR04 ultrasonic sensor (sensor init|ping|read|list)"));
     Serial.println(F("  servo ...            SG90 servo motor (servo attach|detach|write|read|list)"));
     Serial.println(F("  motor ...            L293D motor shield (motor init|forward|reverse|stop|brake|speed|list)"));
+    Serial.println(F("  relay ...            Relay/latched switch (relay add <pin> <name> [on|off] | set <name> on|off | toggle <name> | status <name> | list)"));
     Serial.println(F("  run ...              Install/list/run/uninstall .hx apps (run install|list|run|uninstall)"));
     Serial.println(F("  calc <expr>          Evaluate arithmetic expressions"));
     Serial.println(F("  set <name> = <expr>  Store a variable for $name in scripts"));
@@ -2023,6 +2037,14 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  onchange remove <pin>  Remove onchange rule"));
     Serial.println(F("  onchange list          List all onchange rules"));
     Serial.println(F("      Pins accept 'D5' or '5'. Rules persist across reboots."));
+  } else if (topic == F("relay")) {
+    Serial.println(F("Relay / latched switch commands:"));
+    Serial.println(F("  relay add <pin> <name> [on|off]  Register a relay (initial level optional)"));
+    Serial.println(F("  relay set <name> on|off  Turn a relay on or off"));
+    Serial.println(F("  relay toggle <name>     Toggle a relay's state"));
+    Serial.println(F("  relay status <name>     Print a relay's current state"));
+    Serial.println(F("  relay list              List all relays"));
+    Serial.println(F("      Names are 1-15 chars [A-Za-z0-9_-]; state persists across reboots."));
   } else if (topic == F("vars")) {
     Serial.println(F("Variable storage (persistent across reboots):"));
     Serial.println(F("  vars list              List all stored variables"));
@@ -2139,6 +2161,8 @@ void executeCommand(const String &line) {
     handleMqtt(line);
   } else if (command == F("onchange")) {
     handleOnchange(line);
+  } else if (command == F("relay")) {
+    handleRelay(line);
   } else if (command == F("settings")) {
     handleSettings(cmd);
   } else if (command == F("wifi")) {
@@ -2480,6 +2504,7 @@ void setup() {
 
   harixos::iot::begin();
   harixos::iot::beginOnchange();
+  harixos::iot::beginRelay();
 
   printPrompt();
   

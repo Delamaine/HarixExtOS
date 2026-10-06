@@ -4,6 +4,10 @@
 #include <LittleFS.h>
 #include <Arduino.h>
 
+#include "../../apps/settings/settings.h"
+#include "../../api/gpio_api.h"
+#include "kernel/iot/mqtt_service.h"
+
 namespace harixos { namespace iot {
 
 using harixos::api::API_INVALID_PIN;
@@ -22,10 +26,7 @@ static uint8_t findRuleIndex(uint8_t pin) {
 }
 
 static bool isPinValid(uint8_t pin) {
-  if (pin > 16) return false;
-  if (pin >= 6 && pin <= 11) return false;
-  if (pin == 1 || pin == 3) return false;
-  return true;
+  return harixos::api::GpioAPI::isAvailablePin(pin);
 }
 
 ApiResult registerOnchange(uint8_t pin, EdgeMode edgeMode,
@@ -74,12 +75,30 @@ EdgeMode getEdgeMode(uint8_t pin) {
   return EdgeMode::Both;
 }
 
+String collectActiveRulePins() {
+  String pins;
+  for (uint8_t i = 0; i < s_ruleCount; ++i) {
+    if (!s_rules[i].active) continue;
+    if (pins.length() > 0) pins += F(",");
+    pins += String(s_rules[i].pin);
+  }
+  return pins;
+}
+
 void feedOnchange(uint8_t pin, bool rawLevel, uint32_t nowMs) {
   for (uint8_t i = 0; i < s_ruleCount; ++i) {
     if (s_rules[i].active) {
       feedEdge(s_rules[i].debounce, rawLevel, nowMs, nullptr);
     }
   }
+}
+
+static void reportEdge(uint8_t pin, bool level) {
+  if (!isConnected()) return;
+  // ponytail: fixed "<prefix>/gpio/<pin>" topic for every edge; per-rule topics
+  // or HA discovery would go here if edge payloads need to differ.
+  String topic = shellSettings.mqttPrefix + "/gpio/" + String(pin);
+  publishRaw(topic, level ? F("on") : F("off"));
 }
 
 void updateOnchange() {
@@ -92,6 +111,7 @@ void updateOnchange() {
       EdgeMode mode = s_rules[i].edgeMode;
       bool oldLevel = !s_rules[i].debounce.stableLevel;
       if (edgeMatches(mode, oldLevel, newLevel)) {
+        reportEdge(s_rules[i].pin, newLevel);
         if (s_rules[i].callback) {
           s_rules[i].callback(s_rules[i].pin, newLevel);
         }
@@ -196,6 +216,8 @@ ApiResult shellAddOnchange(const String &args, Stream &output) {
   });
   if (!result.isError()) {
     saveOnchangeRules();
+    // A new edge pin must reach HA even though discovery already ran once.
+    invalidateDiscovery();
     output.printf("Added onchange rule: GPIO%u %s\r\n", pin, edgeModeToString(mode).c_str());
   }
   return result;

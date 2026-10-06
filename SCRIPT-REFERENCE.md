@@ -14,7 +14,7 @@ keyword below works identically in both:
 **Servo:** `servo attach`, `servo detach`, `servo write`, `servo read`, `servo list`
 **Sensor:** `sensor init`, `sensor ping`, `sensor read`, `sensor list`
 **Motor:** `motor init`, `motor forward`, `motor reverse`, `motor stop`, `motor brake`, `motor speed`, `motor list`
-**IoT:** `post`, `mqtt`, `onchange`
+**IoT:** `post`, `mqtt`, `relay` set|toggle|status|list, `onchange`
 **Variables:** `set`, `vars list|set|get|del|save|load|clear`
 
 Shell-only (typing these inside a script or `schedule add` reports
@@ -382,6 +382,21 @@ onchange list
 
 Rules persist to `/onchange.rules` (max 8 rules) and reload at boot.
 Pin mode is configured to input automatically when a rule is registered.
+
+### `relay` — latched switch outputs
+
+```bash
+relay add <pin> <name> [on|off]  # register a relay (initial level optional)
+relay set <name> on|off          # latch on/off; level holds until changed
+relay toggle <name>              # invert the current level
+relay status <name>              # show current level
+relay list                       # show registered relays (bare `relay` lists)
+```
+
+Relays latch in software: once set, a level holds until it is changed
+again, surviving reboots. Registration and level persist to `/relays.conf`
+(max 4 relays) and reload at boot. Relay names are 1-15 chars of
+`[A-Za-z0-9_-]` and map one GPIO to one HA `switch` when MQTT is enabled.
 
 ## WiFi Command (Networking)
 

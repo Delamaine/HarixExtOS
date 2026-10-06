@@ -36,6 +36,10 @@ bool hasOnchangeRule(uint8_t pin);
 // Get edge mode for a pin (returns Both if not found).
 EdgeMode getEdgeMode(uint8_t pin);
 
+// Collect pins of active rules as a comma-separated string (e.g. "2,4").
+// Used for HA binary_sensor discovery.
+String collectActiveRulePins();
+
 // ISR-friendly: feed a raw level sample for a pin.
 void feedOnchange(uint8_t pin, bool rawLevel, uint32_t nowMs);
 

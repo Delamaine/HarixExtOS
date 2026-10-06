@@ -23,6 +23,9 @@ constexpr size_t kReplyCap = 4000;
 // skips telemetry ticks (exactly one fires after script completes).
 void setScriptActive(bool active);
 bool isScriptActive();
+// Force HA discovery to re-publish on the next update(): call after an
+// entity (relay, onchange rule) is registered while MQTT is running.
+void invalidateDiscovery();
 // Shared body behind both dispatchers' `mqtt status|start|stop|pub ...`.
 harixos::api::ApiResult handleCommand(const String &args, Stream &output);
 }}
