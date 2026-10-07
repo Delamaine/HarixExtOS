@@ -2505,6 +2505,7 @@ void setup() {
   harixos::iot::begin();
   harixos::iot::beginOnchange();
   harixos::iot::beginRelay();
+  harixos::api::beginSensor();
 
   printPrompt();
   
