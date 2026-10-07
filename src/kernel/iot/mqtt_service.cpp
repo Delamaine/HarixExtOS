@@ -12,7 +12,9 @@
 #include "../../kernel/iot/onchange.h"
 #include "../../kernel/iot/relay.h"
 #include "../../utils/string_stream.h"
+#include "../../api/sensor.h"
 #include "inbound_queue.h"
+#include "sensor_logic.h"
 
 namespace harixos {
 namespace iot {
@@ -379,6 +381,37 @@ void publishHADiscovery() {
     start = comma + 1;
   }
 
+  // Sensor configs: one per registered sensor per readable quantity.
+  String snames = harixos::api::collectSensorNames();
+  start = 0;
+  while (start < snames.length()) {
+    size_t comma = snames.indexOf(',', start);
+    String name = (comma == (size_t)-1) ? snames.substring(start) : snames.substring(start, comma);
+    name.trim();
+    if (name.length() > 0) {
+      uint8_t stype;
+      if (harixos::api::sensorTypeOf(name.c_str(), &stype)) {
+        for (uint8_t q = kQtyDistance; q < kSensorQtyCount; ++q) {
+          if (!sensorHasQuantity(stype, q)) continue;
+          String cfgTopic = "homeassistant/sensor/";
+          cfgTopic += hp;
+          cfgTopic += "/";
+          cfgTopic += name;
+          cfgTopic += "_";
+          cfgTopic += sensorQtyName(q);
+          cfgTopic += "/config";
+          char pl[256];
+          if (sensorDiscoveryPayload(hp.c_str(), prefix.c_str(), name.c_str(), stype, q,
+                                     pl, sizeof(pl))) {
+            publishRaw(cfgTopic, pl, true);
+          }
+        }
+      }
+    }
+    if (comma == (size_t)-1) break;
+    start = comma + 1;
+  }
+
   discoveryPublished = true;
 }
 
@@ -418,6 +451,10 @@ void update() {
     // disconnected was never published, and a fresh boot has no relay state
     // on the broker at all (HA would show `unknown`).
     publishRelayStates();
+    // Cached sensor readings must also survive reconnects: a value changed
+    // while disconnected was never published, and fresh boots have no state
+    // on the broker until the first cron `sensor publish`.
+    harixos::api::publishSensorStates();
   }
   // Discovery self-gates on discoveryPublished: publishes on first connect and
   // re-publishes after any relay/onchange entity is registered at runtime
