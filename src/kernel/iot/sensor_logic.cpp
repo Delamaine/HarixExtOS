@@ -6,6 +6,21 @@
 
 #include "relay_logic.h"
 
+// Strict decimal parser: all digits, never wraps, 0..255. Rejects "4x", "260",
+// and "" so a corrupt line can never silently remap a sensor to another GPIO.
+// '|' terminates the field (fields are not NUL-terminated in the line buffer).
+static bool parseU8(const char* s, uint8_t* out) {
+  if (s == nullptr || *s == '\0' || *s == '|') return false;
+  int v = 0;
+  for (; *s != '\0' && *s != '|'; ++s) {
+    if (*s < '0' || *s > '9') return false;
+    v = v * 10 + (*s - '0');
+    if (v > 255) return false;
+  }
+  *out = (uint8_t)v;
+  return true;
+}
+
 namespace harixos {
 namespace iot {
 
@@ -136,14 +151,15 @@ bool sensorParseLine(const char* line, SensorDef* out) {
   uint8_t type;
   if (!sensorParseType(typeName, &type)) return false;
 
-  uint8_t a = (uint8_t)atoi(f3);
-  uint8_t b = (uint8_t)atoi(f4);
+  uint8_t a, b;
+  if (!parseU8(f3, &a) || !parseU8(f4, &b)) return false;
 
-  // Pin consistency: pinned types require a != 0 (0 = unset); bme280 takes none.
-  if (type == kSensorBme280) {
-    if (a != 0) return false;
-  } else {
-    if (a == 0) return false;
+  // Pin rules mirror registerSensor: pinned types need a nonzero GPIO (0 =
+  // unset), ultrasonic needs a real echo pin, bme280 takes no pins at all.
+  switch (type) {
+    case kSensorBme280: if (a != 0 || b != 0) return false; break;
+    case kSensorUltrasonic: if (a == 0 || b == 0) return false; break;
+    default: if (a == 0) return false; break;  // dht22 / ds18b20 (b ignored)
   }
 
   memset(out, 0, sizeof(*out));

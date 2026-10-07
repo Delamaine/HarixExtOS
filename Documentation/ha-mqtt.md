@@ -406,8 +406,9 @@ State topics, per measured quantity, retained:
 | pressure | `<prefix>/sensor/<name>/pressure` | hPa | `pressure` |
 
 Per-quantity coverage: ultrasonic → distance; DHT22 → temperature + humidity;
-DS18B20 → temperature; BME280 → temperature + humidity + pressure (a BMP280,
-chip id 0x58, exposes temperature + pressure only).
+DS18B20 → temperature; BME280 → temperature + humidity + pressure. On a BMP280
+(chip id 0x58, temperature + pressure only) the humidity entity is still
+registered but stays `unknown` in HA until real BME280 silicon is attached.
 
 Behaviour of the current implementation:
 

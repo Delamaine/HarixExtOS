@@ -28,6 +28,7 @@ SensorDef s_pool[SensorAPI::kMaxSensors];
 bool s_inited[SensorAPI::kMaxSensors] = {false};
 uint32_t s_lastDhtMs[SensorAPI::kMaxSensors] = {0};
 DHTesp s_dht[SensorAPI::kMaxSensors];
+const char* s_lastReadError = nullptr;  // reason for the most recent readSensor failure
 
 int findIndex(const char* name) {
   for (int i = 0; i < SensorAPI::kMaxSensors; ++i) {
@@ -179,29 +180,47 @@ static bool readBme280(SensorDef& d) {
       break;
     }
   }
-  if (!addr) return false;  // no BME280/BMP280 on I2C
+  if (!addr) {
+    s_lastReadError = "no BME280 on I2C";
+    return false;
+  }
 
   BmeCalib c;
-  if (!bmeReadCalib(addr, &c)) return false;
+  if (!bmeReadCalib(addr, &c)) {
+    s_lastReadError = "BME280 read failed";
+    return false;
+  }
 
   // Oversampling x1, normal mode: ctrl_hum=0x01, ctrl_meas=0x27.
   Wire.beginTransmission(addr);
   Wire.write(0xF2);
   Wire.write(0x01);
-  if (Wire.endTransmission() != 0) return false;
+  if (Wire.endTransmission() != 0) {
+    s_lastReadError = "BME280 read failed";
+    return false;
+  }
   Wire.beginTransmission(addr);
   Wire.write(0xF4);
   Wire.write(0x27);
-  if (Wire.endTransmission() != 0) return false;
+  if (Wire.endTransmission() != 0) {
+    s_lastReadError = "BME280 read failed";
+    return false;
+  }
   delay(30);  // settle for x1 oversampling
 
   uint8_t raw[8];
-  if (!bmeReadBlock(addr, 0xF7, raw, sizeof(raw))) return false;
+  if (!bmeReadBlock(addr, 0xF7, raw, sizeof(raw))) {
+    s_lastReadError = "BME280 read failed";
+    return false;
+  }
 
   uint32_t adcP = ((uint32_t)raw[0] << 12) | ((uint32_t)raw[1] << 4) | ((uint32_t)raw[2] >> 4);
   uint32_t adcT = ((uint32_t)raw[3] << 12) | ((uint32_t)raw[4] << 4) | ((uint32_t)raw[5] >> 4);
   uint32_t adcH = ((uint32_t)raw[6] << 8) | (uint32_t)raw[7];
-  if (adcT == 0x80000 || adcP == 0x80000) return false;  // unpowered/uninitialized
+  if (adcT == 0x80000 || adcP == 0x80000) {
+    s_lastReadError = "BME280 read failed";
+    return false;  // unpowered/uninitialized
+  }
 
   // Temperature, then pressure, then humidity — datasheet §9.1.3.
   double v1 = (adcT / 16384.0 - c.t1 / 1024.0) * c.t2;
@@ -215,7 +234,10 @@ static bool readBme280(SensorDef& d) {
   v2 = v2 / 4.0 + c.p4 * 65536.0;
   v1 = (c.p3 * v1 * v1 / 524288.0 + c.p2 * v1) / 524288.0;
   v1 = (1.0 + v1 / 32768.0) * c.p1;
-  if (v1 == 0.0) return false;
+  if (v1 == 0.0) {
+    s_lastReadError = "BME280 read failed";
+    return false;
+  }
   double pressPa = 1048576.0 - adcP;
   pressPa = (pressPa - v2 / 4096.0) * 6250.0 / v1;
   v1 = c.p9 * pressPa * pressPa / 2147483648.0;
@@ -236,6 +258,7 @@ static bool readBme280(SensorDef& d) {
 }
 
 static bool readSensor(int idx) {
+  s_lastReadError = nullptr;
   SensorDef& d = s_pool[idx];
   switch (d.type) {
     case kSensorUltrasonic: return readUltrasonic(d);
@@ -248,29 +271,60 @@ static bool readSensor(int idx) {
 
 // ===== registration / persistence =====
 
+// Any GPIO clash between a new pinned sensor and an already-inited one.
+// ds18b20's b is a device index, not a GPIO, so it never participates.
+// bme280 has no GPIOs. b of the new sensor is a GPIO only for ultrasonic.
+static bool pinsConflict(uint8_t type, uint8_t a, uint8_t b) {
+  for (int i = 0; i < SensorAPI::kMaxSensors; ++i) {
+    if (!s_inited[i]) continue;
+    const SensorDef& e = s_pool[i];
+    if (e.type == kSensorBme280) continue;
+    if (a != 0 && (a == e.a || (e.type == kSensorUltrasonic && a == e.b))) return true;
+    if (type == kSensorUltrasonic && b != 0 &&
+        (b == e.a || (e.type == kSensorUltrasonic && b == e.b))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // out == nullptr silences the success line (boot-time config load).
 static ApiResult registerSensor(uint8_t type, uint8_t a, uint8_t b,
                                 const String& name, Stream* out) {
   if (!sensorValidName(name.c_str())) {
     return ApiResult(API_INVALID_ARGUMENT, "sensor name: 1-15 chars [A-Za-z0-9_-]");
   }
+  // Pin rules mirror sensorParseLine so a persisted line is never accepted at
+  // load and rejected at register (or vice versa): pinned types need a nonzero
+  // GPIO, ultrasonic needs a real echo pin, bme280 takes no pins at all.
   if (type == kSensorBme280) {
-    // no pins; the (0,0) pair is shared by the single I2C-sensor family
-  } else if (type == kSensorUltrasonic) {
-    if (!GpioAPI::isAvailablePin(a) || !GpioAPI::isAvailablePin(b)) {
-      return ApiResult(API_INVALID_PIN,
-                       "GPIO" + String(a) + " or GPIO" + String(b) + " is reserved or invalid");
+    if (a != 0 || b != 0) {
+      return ApiResult(API_INVALID_ARGUMENT, "bme280 takes no pins");
     }
   } else {
-    if (!GpioAPI::isAvailablePin(a)) {
-      return ApiResult(API_INVALID_PIN, "GPIO" + String(a) + " is reserved or invalid");
+    if (a == 0 || (type == kSensorUltrasonic && b == 0)) {
+      return ApiResult(API_INVALID_ARGUMENT, "sensor pin must be a nonzero GPIO number");
+    }
+    if (type == kSensorUltrasonic) {
+      if (!GpioAPI::isAvailablePin(a) || !GpioAPI::isAvailablePin(b)) {
+        return ApiResult(API_INVALID_PIN,
+                         "GPIO" + String(a) + " or GPIO" + String(b) + " is reserved or invalid");
+      }
+    } else {
+      if (!GpioAPI::isAvailablePin(a)) {
+        return ApiResult(API_INVALID_PIN, "GPIO" + String(a) + " is reserved or invalid");
+      }
     }
   }
-  if (type != kSensorBme280 && sensorHasPin(s_pool, SensorAPI::kMaxSensors, a, b, -1)) {
+  if (pinsConflict(type, a, b)) {
     return ApiResult(API_DUPLICATE, "sensor already registered for those pins");
   }
-  if (sensorHasPin(s_pool, SensorAPI::kMaxSensors, 0, 0, -1) && type == kSensorBme280) {
-    return ApiResult(API_DUPLICATE, "sensor already registered for those pins");
+  if (type == kSensorBme280) {
+    for (int i = 0; i < SensorAPI::kMaxSensors; ++i) {
+      if (s_inited[i] && s_pool[i].type == kSensorBme280) {
+        return ApiResult(API_DUPLICATE, "bme280 already registered");
+      }
+    }
   }
   if (sensorFindIndex(s_pool, SensorAPI::kMaxSensors, name.c_str()) >= 0) {
     return ApiResult(API_DUPLICATE, "sensor already registered with name " + name);
@@ -371,7 +425,8 @@ static ApiResult readByName(const String& name, Stream& out) {
     return ApiResult(API_ERROR, "read too soon");
   }
   if (!readSensor(idx)) {
-    return ApiResult(API_ERROR, "read " + name + " failed");
+    return ApiResult(API_ERROR,
+                     s_lastReadError ? String(s_lastReadError) : "read " + name + " failed");
   }
   printReadings(idx, out);
   return ApiResult(API_OK, "");
@@ -436,6 +491,14 @@ static ApiResult legacyRead(const String& tail, Stream& out) {
 
 // ===== register / publish parsers =====
 
+// Reject non-numeric and out-of-range pin tokens ("D5" -> 0 must not slip
+// through); registerSensor still enforces GPIO availability.
+static bool parsePin(const String& s, uint8_t* out) {
+  if (!isNumeric(s) || s.toInt() > 255) return false;
+  *out = (uint8_t)s.toInt();
+  return true;
+}
+
 static ApiResult doRegister(const String& tail, Stream& out) {
   int sp = tail.indexOf(' ');
   if (sp < 0) {
@@ -462,7 +525,11 @@ static ApiResult doRegister(const String& tail, Stream& out) {
     if (sp1 < 0) {
       return ApiResult(API_INVALID_ARGUMENT, "Usage: sensor register ultrasonic <trigger> <echo> <name>");
     }
-    a = (uint8_t)rest.substring(0, sp1).toInt();
+    uint8_t t;
+    if (!parsePin(rest.substring(0, sp1), &t)) {
+      return ApiResult(API_INVALID_ARGUMENT, "Usage: sensor register ultrasonic <trigger> <echo> <name>");
+    }
+    a = t;
     rest = rest.substring(sp1 + 1);
     String echoStr;
     if (rest.indexOf(' ') < 0) {
@@ -470,26 +537,34 @@ static ApiResult doRegister(const String& tail, Stream& out) {
     }
     echoStr = rest.substring(0, rest.indexOf(' '));
     nameStr = rest.substring(rest.indexOf(' ') + 1);
-    b = (uint8_t)echoStr.toInt();
+    if (!parsePin(echoStr, &b)) {
+      return ApiResult(API_INVALID_ARGUMENT, "Usage: sensor register ultrasonic <trigger> <echo> <name>");
+    }
   } else if (type == kSensorDht22) {
     int sp1 = rest.indexOf(' ');
     if (sp1 < 0) {
       return ApiResult(API_INVALID_ARGUMENT, "Usage: sensor register dht22 <pin> <name>");
     }
-    a = (uint8_t)rest.substring(0, sp1).toInt();
+    if (!parsePin(rest.substring(0, sp1), &a)) {
+      return ApiResult(API_INVALID_ARGUMENT, "Usage: sensor register dht22 <pin> <name>");
+    }
     nameStr = rest.substring(sp1 + 1);
   } else if (type == kSensorDs18b20) {
     int sp1 = rest.indexOf(' ');
     if (sp1 < 0) {
       return ApiResult(API_INVALID_ARGUMENT, "Usage: sensor register ds18b20 <pin> [index] <name>");
     }
-    a = (uint8_t)rest.substring(0, sp1).toInt();
+    if (!parsePin(rest.substring(0, sp1), &a)) {
+      return ApiResult(API_INVALID_ARGUMENT, "Usage: sensor register ds18b20 <pin> [index] <name>");
+    }
     rest = rest.substring(sp1 + 1);
     int sp2 = rest.indexOf(' ');
     if (sp2 < 0) {
       nameStr = rest;  // index defaults to 0
     } else {
-      b = (uint8_t)rest.substring(0, sp2).toInt();
+      if (!parsePin(rest.substring(0, sp2), &b)) {
+        return ApiResult(API_INVALID_ARGUMENT, "Usage: sensor register ds18b20 <pin> [index] <name>");
+      }
       nameStr = rest.substring(sp2 + 1);
     }
   } else {  // bme280: no pins
@@ -555,7 +630,9 @@ ApiResult SensorAPI::runCommand(const String& args, Stream& out) {
     return ApiResult(API_OK, "");
   }
   if (action == F("read")) {
-    if (tail.length() == 0 || isNumeric(tail)) return legacyRead(tail, out);
+    if (tail.length() == 0 || (isNumeric(tail) && findIndex(tail.c_str()) < 0)) {
+      return legacyRead(tail, out);  // numeric + no such name -> echo-pin alias
+    }
     return readByName(tail, out);
   }
   if (action == F("publish")) {

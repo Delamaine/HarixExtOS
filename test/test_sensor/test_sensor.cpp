@@ -147,6 +147,11 @@ static void test_parse_line_rejects_malformed(void) {
   TEST_ASSERT_FALSE(sensorParseLine("garage|nonsense|4|0", &out));
   TEST_ASSERT_FALSE(sensorParseLine("garage|dht22|0|0", &out));
   TEST_ASSERT_FALSE(sensorParseLine("garage|bme280|4|0", &out));
+  TEST_ASSERT_FALSE(sensorParseLine("garage|bme280|0|1", &out));
+  TEST_ASSERT_FALSE(sensorParseLine("door|ultrasonic|5|0", &out));
+  TEST_ASSERT_FALSE(sensorParseLine("door|ultrasonic|0|6", &out));
+  TEST_ASSERT_FALSE(sensorParseLine("garage|dht22|4x|0", &out));
+  TEST_ASSERT_FALSE(sensorParseLine("garage|dht22|260|0", &out));
 }
 
 int main(int argc, char **argv) {
