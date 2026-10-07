@@ -84,6 +84,13 @@ void sensorPersistLine(const SensorDef& d, char* out, size_t n);
 // count, invalid name, unknown type, or a pin value that contradicts the type.
 bool sensorParseLine(const char* line, SensorDef* out);
 
+// Build the HA sensor config payload (no JSON lib, String-free).
+// hp  = sanitized prefix (haPrefix()); prefix = raw mqttPrefix
+// (used for state_topic only). Returns false if it doesn't fit in out.
+bool sensorDiscoveryPayload(const char* hp, const char* prefix,
+                            const char* name, uint8_t type, uint8_t qty,
+                            char* out, size_t max);
+
 }}
 
 #endif  // HARIXOS_SENSOR_LOGIC_H

@@ -101,6 +101,42 @@ static void test_persist_line_roundtrip(void) {
   TEST_ASSERT_EQUAL_UINT(2, out.b);
 }
 
+static void test_discovery_payload_field_exact(void) {
+  char out[256];
+  TEST_ASSERT_TRUE(sensorDiscoveryPayload(
+      "haps", "harixos/x", "garage", kSensorDht22, kQtyTemperature, out, sizeof(out)));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"name\":\"haps_garage_temperature\",\"state_topic\":\"harixos/x/sensor/garage/temperature\","
+      "\"unit_of_measurement\":\"" "\xC2\xB0" "C\",\"device_class\":\"temperature\","
+      "\"uniq_id\":\"haps_sensor_garage_temperature\",\"dev\":{\"ids\":\"haps\"}}",
+      out);
+  char small[8];
+  TEST_ASSERT_FALSE(sensorDiscoveryPayload(
+      "haps", "harixos/x", "garage", kSensorDht22, kQtyTemperature, small, sizeof(small)));
+}
+
+static void test_discovery_payload_bme_pressure(void) {
+  char out[256];
+  TEST_ASSERT_TRUE(sensorDiscoveryPayload(
+      "haps", "harixos/x", "garage", kSensorBme280, kQtyPressure, out, sizeof(out)));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"name\":\"haps_garage_pressure\",\"state_topic\":\"harixos/x/sensor/garage/pressure\","
+      "\"unit_of_measurement\":\"hPa\",\"device_class\":\"pressure\","
+      "\"uniq_id\":\"haps_sensor_garage_pressure\",\"dev\":{\"ids\":\"haps\"}}",
+      out);
+}
+
+static void test_discovery_payload_ultrasonic_distance(void) {
+  char out[256];
+  TEST_ASSERT_TRUE(sensorDiscoveryPayload(
+      "haps", "harixos/x", "door", kSensorUltrasonic, kQtyDistance, out, sizeof(out)));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"name\":\"haps_door_distance\",\"state_topic\":\"harixos/x/sensor/door/distance\","
+      "\"unit_of_measurement\":\"cm\",\"device_class\":\"distance\","
+      "\"uniq_id\":\"haps_sensor_door_distance\",\"dev\":{\"ids\":\"haps\"}}",
+      out);
+}
+
 static void test_parse_line_rejects_malformed(void) {
   SensorDef out = {};
   TEST_ASSERT_FALSE(sensorParseLine("", &out));
@@ -122,5 +158,8 @@ int main(int argc, char **argv) {
   RUN_TEST(test_set_and_format_reading);
   RUN_TEST(test_persist_line_roundtrip);
   RUN_TEST(test_parse_line_rejects_malformed);
+  RUN_TEST(test_discovery_payload_field_exact);
+  RUN_TEST(test_discovery_payload_bme_pressure);
+  RUN_TEST(test_discovery_payload_ultrasonic_distance);
   return UNITY_END();
 }

@@ -158,4 +158,18 @@ bool sensorParseLine(const char* line, SensorDef* out) {
   return true;
 }
 
+bool sensorDiscoveryPayload(const char* hp, const char* prefix,
+                            const char* name, uint8_t type, uint8_t qty,
+                            char* out, size_t max) {
+  int n = snprintf(
+      out, max,
+      "{\"name\":\"%s_%s_%s\",\"state_topic\":\"%s/sensor/%s/%s\","
+      "\"unit_of_measurement\":\"%s\",\"device_class\":\"%s\","
+      "\"uniq_id\":\"%s_sensor_%s_%s\",\"dev\":{\"ids\":\"%s\"}}",
+      hp, name, sensorQtyName(qty), prefix, name, sensorQtyName(qty),
+      sensorUnit(type, qty), sensorDeviceClass(type, qty),
+      hp, name, sensorQtyName(qty), hp);
+  return n >= 0 && (size_t)n < max;
+}
+
 }}  // namespace harixos::iot
