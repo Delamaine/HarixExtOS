@@ -12,9 +12,9 @@ keyword below works identically in both:
 **Settings and time:** `settings`, `time`, `reboot`
 **WiFi and GPIO:** `wifi`, `gpio`, `delay`, `system`, `run <path>`, `help`
 **Servo:** `servo attach`, `servo detach`, `servo write`, `servo read`, `servo list`
-**Sensor:** `sensor init`, `sensor ping`, `sensor read`, `sensor list`
+**Sensor:** `sensor` register/unregister/list/read/publish (ultrasonic, DHT22, DS18B20, BME280) plus legacy `init|ping|read|list`
 **Motor:** `motor init`, `motor forward`, `motor reverse`, `motor stop`, `motor brake`, `motor speed`, `motor list`
-**IoT:** `post`, `mqtt`, `relay` set|toggle|status|list, `onchange`
+**IoT:** `post`, `mqtt`, `relay` set|toggle|status|list, `onchange`, `sensor` publish
 **Variables:** `set`, `vars list|set|get|del|save|load|clear`
 
 Shell-only (typing these inside a script or `schedule add` reports
@@ -296,25 +296,36 @@ servo read 4
 servo detach 4
 ```
 
-## Sensor Command (Ultrasonic Distance)
+## Sensor Command (Named Registry)
+
+The `sensor` keyword takes one of the register/unregister/list/read/publish
+actions, or a legacy alias:
 
 ```bash
-sensor init 4 5            # Initialize (trigger=4, echo=5)
-sensor ping                # Ping and show distance
-sensor read 5              # Read distance from echo pin 5
-sensor list                # List all sensors
+sensor register ultrasonic <trigger> <echo> <name>   # HC-SR04
+sensor register dht22 <pin> <name>                   # DHT22
+sensor register ds18b20 <pin> [index] <name>         # DS18B20 (daisy-chain index)
+sensor register bme280 <name>                        # BME280/BMP280 (I2C)
+sensor unregister <name>
+sensor list
+sensor read <name>            # read now, print all quantities
+sensor publish [name]         # read then publish cached readings (retained)
 ```
 
-### Example
+- Registered sensors persist to `/sensors.conf`, publish retained state to
+  `<mqtt_prefix>/sensor/<name>/<quantity>`, and appear in Home Assistant via
+  discovery (see `Documentation/ha-mqtt.md`).
+- The cron-friendly cadence is `schedule add 0 */5 * * * * sensor publish`.
+- Legacy aliases (deprecated, ultrasonic only): `sensor init <t> <e>`,
+  `sensor ping [t] [e]`, `sensor read [echo]`, `sensor list`.
+
 ```bash
-print Initializing sensor...
-sensor init 4 5
-delay 500
-print Taking measurements...
-sensor ping
-delay 1000
-sensor read 5
+sensor register dht22 4 hall
+sensor register ultrasonic 5 6 door
+sensor publish
+sensor read hall
 sensor list
+sensor unregister hall
 ```
 
 ## Motor Command (DC Motors - L293D)

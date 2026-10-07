@@ -797,7 +797,7 @@ void ScriptEngine::printHelp(Stream &output) {
   output.println();
   output.println(F("Drivers:"));
   output.println(F("  servo attach|detach|write <pin> <angle>|read <pin>|list"));
-  output.println(F("  sensor init <trigger> <echo>|ping [trigger] [echo]|read [echo]|list"));
+  output.println(F("  sensor register <ultrasonic <t> <e>|dht22 <pin>|ds18b20 <pin> [idx]|bme280> <name>|unregister <name>|list|read <name>|publish [name]|init <t> <e>|ping [t] [e]|read [echo]|list"));
   output.println(F("  motor init|forward|reverse|stop|brake|speed <0-100>|list"));
   output.println();
   output.println(F("Other:"));

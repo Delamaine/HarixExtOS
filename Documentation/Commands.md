@@ -187,14 +187,30 @@ servo read <pin>
 servo list
 ```
 
-- Ultrasonic sensor:
+- Sensors (named registry: ultrasonic, DHT22, DS18B20 daisy-chain, BME280):
 
 ```
-sensor init <trigger> <echo>
-sensor ping [trigger] [echo]
-sensor read [echo]
+sensor register ultrasonic <trigger> <echo> <name>
+sensor register dht22 <pin> <name>
+sensor register ds18b20 <pin> [index] <name>
+sensor register bme280 <name>
+sensor unregister <name>
 sensor list
+sensor read <name>
+sensor publish [name]
 ```
+
+  - Names are 1-15 chars `[A-Za-z0-9_-]`; pins are GPIO numbers validated via
+    `GpioAPI::isAvailablePin`. Registered sensors persist to `/sensors.conf`
+    (bad lines are skipped with a warning at boot) and their readings publish
+    retained to `<mqtt_prefix>/sensor/<name>/<quantity>` (`distance`,
+    `temperature`, `humidity`, `pressure`). See `Documentation/ha-mqtt.md`.
+  - `sensor publish` reads every sensor now and publishes the cached readings
+    — the cron-friendly cadence:
+    `schedule add 0 */5 * * * * sensor publish`
+  - Legacy pin-addressed aliases still work but are deprecated (ultrasonic
+    only): `sensor init <trigger> <echo>` (registers as `hc<echo>`),
+    `sensor ping [trigger] [echo]`, `sensor read [echo]`, `sensor list`.
 
 - DC motor (L293D H-bridge):
 
@@ -241,12 +257,12 @@ servo read 4
 servo detach 4
 ```
 
-- Ultrasonic sensor reading:
+- Sensor reading (legacy alias form still works; prefer the registry):
 
 ```
-sensor init 4 5
-sensor ping
-sensor read 5
+sensor register ultrasonic 4 5 door
+sensor read door
+sensor publish door
 sensor list
 ```
 

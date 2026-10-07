@@ -284,8 +284,8 @@ relay list
 # Servo / sensor / motor
 servo attach 4
 servo write 4 90
-sensor init 4 5
-sensor ping
+sensor register ultrasonic 4 5 door
+sensor publish door
 motor init m1
 motor forward m1
 
@@ -383,6 +383,56 @@ relay list
 relay set garage off
 ```
 
+## Sensor Commands (named registry)
+
+```bash
+sensor register ultrasonic <trigger> <echo> <name>   # HC-SR04
+sensor register dht22 <pin> <name>                   # DHT22
+sensor register ds18b20 <pin> [index] <name>         # DS18B20 (daisy-chain index)
+sensor register bme280 <name>                        # BME280/BMP280 (I2C; probed 0x76/0x77)
+sensor unregister <name>
+sensor list                                          # bare `sensor` lists too
+sensor read <name>                                   # read now, print all quantities
+sensor publish [name]                                # read (all or one) then publish state
+```
+
+State topics, per measured quantity, retained:
+
+| Quantity | Topic suffix | Unit | `device_class` |
+|---|---|---|---|
+| distance | `<prefix>/sensor/<name>/distance` | cm | `distance` |
+| temperature | `<prefix>/sensor/<name>/temperature` | °C | `temperature` |
+| humidity | `<prefix>/sensor/<name>/humidity` | % | `humidity` |
+| pressure | `<prefix>/sensor/<name>/pressure` | hPa | `pressure` |
+
+Per-quantity coverage: ultrasonic → distance; DHT22 → temperature + humidity;
+DS18B20 → temperature; BME280 → temperature + humidity + pressure (a BMP280,
+chip id 0x58, exposes temperature + pressure only).
+
+Behaviour of the current implementation:
+
+- Sensors are registered by name (1-15 chars `[A-Za-z0-9_-]`), validated via
+  `GpioAPI::isAvailablePin` for pinned types, persisted to `/sensors.conf`
+  (maximum 8). Malformed lines are skipped with a warning at boot.
+- `sensor publish` reads all registered sensors (or one) and publishes the
+  cached readings retained; a failed quantity keeps its previous retained
+  value. Use it as the cron cadence:
+  `schedule add 0 */5 * * * * sensor publish`
+- Readings and discovery are re-published on every MQTT (re)connect, so HA
+  gets last-good state after a reboot or an outage. DHT22 reads are
+  rate-limited to one per 2 s (`sensor read` too soon → `ERROR: read too soon`).
+- HA `sensor` discovery (one config per sensor per quantity) is published on
+  connect and re-published when a sensor is registered/unregistered while
+  connected — same lifecycle as relays/onchange.
+- Discovery config example for a DHT22 named `hall` (prefix `harixos/a590a8`):
+
+```json
+{"name":"harixos_a590a8_hall_temperature","state_topic":"harixos/a590a8/sensor/hall/temperature","unit_of_measurement":"°C","device_class":"temperature","uniq_id":"harixos_a590a8_sensor_hall_temperature","dev":{"ids":"harixos_a590a8"}}
+```
+
+- Legacy `sensor init <t> <e> | ping [t] [e] | read [echo] | list` aliases
+  still work but are deprecated (ultrasonic only, pin-addressed).
+
 ## Example HA Integration YAML
 
 ```yaml
@@ -447,4 +497,5 @@ mosquitto_sub -t 'harixos/a590a8/mqtt_enabled' -v
 # Check HA discovery:
 mosquitto_sub -t 'homeassistant/sensor/#' -v
 mosquitto_sub -t 'homeassistant/switch/#' -v
+mosquitto_sub -t 'homeassistant/binary_sensor/#' -v
 ```

@@ -1888,7 +1888,7 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  settings reload      Reload settings from flash"));
     Serial.println(F("  powerprofile ...     Manage power profile (powerprofile [full|balanced|powersave|minimal|off] | set <profile> | apply | status)"));
     Serial.println(F("  cpufreq ...          Manage CPU frequency (cpufreq [40|80] | set <freq> | status)"));
-    Serial.println(F("  sensor ...           HC-SR04 ultrasonic sensor (sensor init|ping|read|list)"));
+    Serial.println(F("  sensor ...           Sensors: register/list/read/publish (HC-SR04, DHT22, DS18B20, BME280); legacy init/ping/read/list"));
     Serial.println(F("  servo ...            SG90 servo motor (servo attach|detach|write|read|list)"));
     Serial.println(F("  motor ...            L293D motor shield (motor init|forward|reverse|stop|brake|speed|list)"));
     Serial.println(F("  relay ...            Relay/latched switch (relay add <pin> <name> [on|off] | set <name> on|off | toggle <name> | status <name> | list)"));
@@ -1986,14 +1986,20 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("Example:"));
     Serial.println(F("  update check"));
   } else if (topic == F("sensor")) {
-    Serial.println(F("Sensor commands (HC-SR04 ultrasonic):"));
-    Serial.println(F("  sensor init <trigger> <echo>    Initialize sensor on given pins"));
-    Serial.println(F("  sensor ping [trigger] [echo]     Take a distance reading (defaults: trigger=4, echo=5)"));
-    Serial.println(F("  sensor read [echo]               Read last measured distance (default echo=5)"));
-    Serial.println(F("  sensor list                      List all initialized sensors"));
+    Serial.println(F("Sensor registry (HC-SR04 ultrasonic, DHT22, DS18B20 daisy-chain, BME280):"));
+    Serial.println(F("  sensor register ultrasonic <trigger> <echo> <name>"));
+    Serial.println(F("  sensor register dht22 <pin> <name>"));
+    Serial.println(F("  sensor register ds18b20 <pin> [index] <name>"));
+    Serial.println(F("  sensor register bme280 <name>"));
+    Serial.println(F("  sensor unregister <name>          Remove and persist"));
+    Serial.println(F("  sensor list                       List registered sensors + cached values"));
+    Serial.println(F("  sensor read <name>                Read now and print all quantities"));
+    Serial.println(F("  sensor publish [name]             Read (all or one) then publish state"));
     Serial.println();
-    Serial.println(F("Distance output: mm, cm, and meters"));
-    Serial.println(F("Object detection: reports 'yes' or 'no'"));
+    Serial.println(F("Legacy init/ping/read/list remain as deprecated aliases (ultrasonic only)."));
+    Serial.println(F("Pins validate via GpioAPI::isAvailablePin; names 1-15 chars [A-Za-z0-9_-]."));
+    Serial.println(F("Registered sensors persist to /sensors.conf; state publishes retained to"));
+    Serial.println(F("  <mqtt_prefix>/sensor/<name>/<quantity>"));
   } else if (topic == F("servo")) {
     Serial.println(F("Servo commands (SG90 PWM on ESP8266):"));
     Serial.println(F("  servo attach <pin>       Attach servo to GPIO pin"));
