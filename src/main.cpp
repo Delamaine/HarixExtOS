@@ -23,6 +23,7 @@
 #include "apps/notepad/notepad.h"
 #include "apps/settings/settings.h"
 #include "kernel/filesystem/filesystem.h"
+#include "kernel/crash_log.h"
 #include "kernel/iot/mqtt_service.h"
 #include "kernel/iot/onchange.h"
 #include "kernel/iot/relay.h"
@@ -370,6 +371,26 @@ void handleInfo() {
   printSystemInfo();
   printWifiStatus();
   printGpioHelp();
+  uint32_t total = 0, used = 0;
+  harixos::HttpDownloader::getStorageInfo(total, used);
+  Serial.printf("  Filesystem: %s used of %s\r\n", bytesToHuman(used).c_str(),
+                bytesToHuman(total).c_str());
+  String crashLog = harixos::readText("/crash.log");
+  int end = crashLog.lastIndexOf('\n');
+  if (end > 0) {
+    int start = crashLog.lastIndexOf('\n', end - 1);
+    int lineStart = (start >= 0) ? start + 1 : 0;
+    String last = crashLog.substring(lineStart, end);
+    if (last.length() > 0) {
+      Serial.printf("  Last reset: %s\r\n", last.c_str());
+    }
+  }
+  time_t now = time(nullptr);
+  if (now >= 1000000000) {  // same threshold handleTime uses
+    char buf[32];
+    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", localtime(&now));
+    Serial.printf("  Time: %s\r\n", buf);
+  }
 }
 
 void handleAboutInfo() {
@@ -1848,7 +1869,7 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("System commands:"));
     Serial.println(F("  help                 Show all commands"));
     Serial.println(F("  about                Show version and features"));
-    Serial.println(F("  info                 Show system, WiFi, and GPIO summary"));
+    Serial.println(F("  info                 Show system, WiFi, GPIO, FS, and last reset"));
     Serial.println(F("  chip                 Show chip and flash details"));
     Serial.println(F("  heap                 Show free heap"));
     Serial.println(F("  uptime               Show runtime"));
@@ -2469,6 +2490,27 @@ void setup() {
     Serial.println(F("LittleFS mounted."));
   } else {
     Serial.println(F("LittleFS mount failed."));
+  }
+
+  {
+    const rst_info* ri = ESP.getResetInfoPtr();
+    // static: keeps ~1.6KB off setup()'s cont stack — the TLS update check
+    // that runs later in setup() overflows and soft-WDTs otherwise.
+    static char existing[harixos::kCrashLogMax];
+    static char updated[harixos::kCrashLogMax];
+    String prev = harixos::readText("/crash.log");
+    strncpy(existing, prev.c_str(), sizeof(existing) - 1);
+    existing[sizeof(existing) - 1] = '\0';
+    char line[harixos::kCrashLineMax];
+    harixos::crashFormatLine(line, sizeof(line), resetReasonToString().c_str(),
+                             ri->exccause, ri->epc1, ri->excvaddr, ri->depc,
+                             harixos::crashBootCount(existing) + 1);
+    if (harixos::crashAppendLine(updated, sizeof(updated), existing, line) > 0) {
+      harixos::writeText("/crash.log", updated, false);  // non-fatal on failure
+    }
+    if (harixos::crashReasonIsAbnormal(ri->reason)) {
+      Serial.printf("Previous run ended abnormally: %s\r\n", line);
+    }
   }
 
   harixos::api::expr::setResolver(harixos::api::resolveDeviceValueToken);

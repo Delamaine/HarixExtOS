@@ -71,7 +71,7 @@ Serial console
 
 Common commands
 - `help` — list available commands
-- `info` — system and Wi-Fi summary
+- `info` — system, Wi-Fi, filesystem and last-reset summary
 - `pwd` / `ls` — check filesystem
 - `notepad /myfile.txt` — try editing and saving a text file
 - `gpio list` — show available GPIO pins
