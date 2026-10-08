@@ -5,8 +5,10 @@
 
 namespace harixos {
 
-// One crash-log line: reason|exccause|0xEP C1|0xEXCVADDR|0xDEPC|boots=N
-// sized so kCrashMaxLines lines always fit in kCrashLogMax bytes.
+// One crash-log line: reason|exccause|0xEPC1|0xEXCVADDR|0xDEPC|boots=N
+// (the line must not contain '\n'). kCrashLogMax fits kCrashMaxLines lines
+// of crashFormatLine output (max 85 chars -> 689 bytes); anything longer
+// makes crashAppendLine return -1 rather than truncate.
 constexpr size_t kCrashLineMax = 96;
 constexpr size_t kCrashMaxLines = 8;
 constexpr size_t kCrashLogMax = 768;
