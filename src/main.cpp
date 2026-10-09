@@ -1950,6 +1950,7 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  settings show        Show current settings"));
     Serial.println(F("  settings banner on|off  Toggle startup banner"));
     Serial.println(F("  settings timezone <region>  Set timezone (e.g. Pacific/Auckland, UTC, PKT-5)"));
+    Serial.println(F("  settings hostname <name>  Set mDNS hostname (<name>.local)"));
     Serial.println(F("  settings update on|off  Toggle auto-update check"));
     Serial.println(F("  settings save        Save settings to flash"));
     Serial.println(F("  settings reload      Reload settings from flash"));
@@ -2136,6 +2137,7 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  settings show          Print current settings"));
     Serial.println(F("  settings banner on|off  Toggle startup banner"));
     Serial.println(F("  settings timezone <tz> Set timezone (IANA, UTC, or POSIX)"));
+    Serial.println(F("  settings hostname <name> Set mDNS hostname (<name>.local)"));
     Serial.println(F("  settings update on|off  Toggle auto-update check"));
     Serial.println(F("  settings save          Persist settings to flash"));
     Serial.println(F("  settings reload        Reload settings from flash"));
