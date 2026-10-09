@@ -20,6 +20,7 @@ struct AppSettings {
   String mqttPrefix = "";      // empty -> resolved to "harixos/<chipid>" at load
   uint32_t mqttInterval = 60;  // seconds; 0 = off
   bool mqttDiscover = true;
+  String hostname = "";   // empty -> "harixos-<chipid>" at load
 };
 
 AppSettings loadSettings();

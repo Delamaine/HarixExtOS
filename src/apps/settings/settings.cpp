@@ -14,6 +14,13 @@ String resolveMqttPrefix(const String &prefix) {
   return String("harixos/") + String(ESP.getChipId(), HEX);
 }
 
+String resolveHostname(const String &hostname) {
+  if (hostname.length() > 0) {
+    return hostname;
+  }
+  return String("harixos-") + String(ESP.getChipId(), HEX);
+}
+
 }  // namespace
 
 AppSettings shellSettings;
@@ -22,6 +29,7 @@ AppSettings loadSettings() {
   AppSettings settings;
   if (!exists(kSettingsPath)) {
     settings.mqttPrefix = resolveMqttPrefix(settings.mqttPrefix);
+    settings.hostname = resolveHostname(settings.hostname);
     return settings;
   }
 
@@ -167,7 +175,18 @@ AppSettings loadSettings() {
     }
   }
 
+  int hnPos = content.indexOf("hostname=");
+  if (hnPos >= 0) {
+    int endLine = content.indexOf('\n', hnPos);
+    String hnVal = endLine == -1 ? content.substring(hnPos + 9) : content.substring(hnPos + 9, endLine);
+    hnVal.trim();
+    if (hnVal.length() > 0) {
+      settings.hostname = hnVal;
+    }
+  }
+
   settings.mqttPrefix = resolveMqttPrefix(settings.mqttPrefix);
+  settings.hostname = resolveHostname(settings.hostname);
 
   return settings;
 }
@@ -188,6 +207,7 @@ bool saveSettings(const AppSettings &settings) {
   content += String("mqtt_prefix=") + settings.mqttPrefix + "\n";
   content += String("mqtt_interval=") + String(settings.mqttInterval) + "\n";
   content += String("mqtt_discover=") + (settings.mqttDiscover ? "on" : "off") + "\n";
+  content += String("hostname=") + settings.hostname + "\n";
   bool ok = writeText(kSettingsPath, content, false);
   if (ok) {
     Serial.println(F("System settings saved successfully."));
@@ -210,6 +230,7 @@ void printSettings(const AppSettings &settings, Print &out) {
              settings.mqttPrefix.c_str(),
              (unsigned)settings.mqttInterval,
              settings.mqttDiscover ? "on" : "off");
+  out.printf("  Hostname: %s\r\n", settings.hostname.c_str());
   out.printf("  Config file: %s\n", kSettingsPath);
 }
 

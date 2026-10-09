@@ -713,7 +713,7 @@ void handleRelay(const String &line) {
 void handleSettings(const TokenizedLine &cmd) {
   if (cmd.count < 2) {
     harixos::printSettings(shellSettings, Serial);
-    Serial.println(F("Commands: settings show | settings banner on|off | settings timezone <tz> | settings update on|off | settings save | settings reload"));
+    Serial.println(F("Commands: settings show | settings banner on|off | settings timezone <tz> | settings hostname <name> | settings update on|off | settings save | settings reload"));
     return;
   }
 
@@ -771,6 +771,17 @@ void handleSettings(const TokenizedLine &cmd) {
     tzset();
     if (harixos::saveSettings(shellSettings)) {
       Serial.printf("Settings saved. Timezone updated to: %s (%s)\r\n", tzVal.c_str(), posixStr);
+    } else {
+      Serial.println(F("Failed to save settings."));
+    }
+  } else if (action == F("hostname")) {
+    if (cmd.count < 3) {
+      Serial.println(F("Usage: settings hostname <name>"));
+      return;
+    }
+    shellSettings.hostname = cmd.tokens[2];
+    if (harixos::saveSettings(shellSettings)) {
+      Serial.printf("Settings saved. Hostname: %s\r\n", shellSettings.hostname.c_str());
     } else {
       Serial.println(F("Failed to save settings."));
     }

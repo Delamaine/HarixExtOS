@@ -106,7 +106,7 @@ There is no `format` command; LittleFS is formatted at provision time.
 
 Apps and variables
 - `notepad <path>` — Open interactive line editor
-- `settings` — Show and edit persistent shell settings (`settings show|banner|timezone|tz|update|save|reload`)
+- `settings` — Show and edit persistent shell settings (`settings show|banner|timezone|tz|hostname|update|save|reload`)
 - `calc <expr>` — Evaluate arithmetic expressions
 - `set <name> = <expr>` — Store a script variable usable as `$name`
 - `vars [list|set|get|del|save|load|clear]` — Global variable store
