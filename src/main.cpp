@@ -2617,6 +2617,8 @@ void loop() {
         mdnsStarted = MDNS.begin(shellSettings.hostname.c_str());
         if (!mdnsStarted) {
           Serial.println(F("mDNS: start failed."));
+        } else if (httpServerRunning && !mdnsHttpService) {
+          mdnsHttpService = MDNS.addService(nullptr, "http", "tcp", httpServePort);
         }
       } else {
         MDNS.notifyAPChange();
