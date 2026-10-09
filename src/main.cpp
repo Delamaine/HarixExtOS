@@ -6,6 +6,7 @@
 #include <ESP8266WebServer.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include <ESP8266mDNS.h>
 #include <time.h>
 
 #define HARIXOS_VERSION_MAJOR 1
@@ -65,6 +66,10 @@ String httpServeFile;
 String httpServeDir;
 uint16_t httpServePort = 80;
 bool httpServerRunning = false;
+
+static bool mdnsStarted = false;
+static bool mdnsWasUp = false;
+static MDNSResponder::hMDNSService mdnsHttpService = nullptr;
 
 struct TokenizedLine {
   String tokens[kMaxTokens];
@@ -391,6 +396,7 @@ void handleInfo() {
     strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", localtime(&now));
     Serial.printf("  Time: %s\r\n", buf);
   }
+  Serial.printf("  mDNS: %s.local\r\n", shellSettings.hostname.c_str());
 }
 
 void handleAboutInfo() {
@@ -710,6 +716,22 @@ void handleRelay(const String &line) {
   Serial.println(result.message);
 }
 
+static void mdnsApplyHostname() {
+  if (!mdnsStarted) {
+    return;
+  }
+  MDNS.end();
+  mdnsHttpService = nullptr;  // end() invalidates the handle
+  mdnsStarted = MDNS.begin(shellSettings.hostname.c_str());
+  if (!mdnsStarted) {
+    Serial.println(F("mDNS: start failed."));
+    return;
+  }
+  if (httpServerRunning) {
+    mdnsHttpService = MDNS.addService(nullptr, "http", "tcp", httpServePort);
+  }
+}
+
 void handleSettings(const TokenizedLine &cmd) {
   if (cmd.count < 2) {
     harixos::printSettings(shellSettings, Serial);
@@ -780,6 +802,7 @@ void handleSettings(const TokenizedLine &cmd) {
       return;
     }
     shellSettings.hostname = cmd.tokens[2];
+    mdnsApplyHostname();
     if (harixos::saveSettings(shellSettings)) {
       Serial.printf("Settings saved. Hostname: %s\r\n", shellSettings.hostname.c_str());
     } else {
@@ -793,6 +816,7 @@ void handleSettings(const TokenizedLine &cmd) {
     }
   } else if (action == F("reload")) {
     shellSettings = harixos::loadSettings();
+    mdnsApplyHostname();
     Serial.println(F("Settings reloaded."));
   } else {
     Serial.println(F("Unknown settings action."));
@@ -1090,6 +1114,13 @@ void handleServe(const TokenizedLine &cmd) {
   httpServer->onNotFound([]() { handleHttpRequest(); });
   httpServer->begin();
   httpServerRunning = true;
+  if (mdnsStarted) {
+    if (mdnsHttpService) {
+      MDNS.removeService(mdnsHttpService);
+      mdnsHttpService = nullptr;
+    }
+    mdnsHttpService = MDNS.addService(nullptr, "http", "tcp", httpServePort);
+  }
 
   Serial.printf("Serving %s on %s:%u\r\n", httpServeFile.c_str(), WiFi.localIP().toString().c_str(), httpServePort);
 }
@@ -1101,6 +1132,10 @@ void handleHttpStop() {
     httpServer = nullptr;
   }
   httpServerRunning = false;
+  if (mdnsHttpService) {
+    MDNS.removeService(mdnsHttpService);
+    mdnsHttpService = nullptr;
+  }
   Serial.println(F("HTTP server stopped."));
 }
 
@@ -2575,6 +2610,24 @@ void setup() {
 
 void loop() {
   handleSerialInput();
+  {
+    bool up = (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0));
+    if (up && !mdnsWasUp) {
+      if (!mdnsStarted) {
+        mdnsStarted = MDNS.begin(shellSettings.hostname.c_str());
+        if (!mdnsStarted) {
+          Serial.println(F("mDNS: start failed."));
+        }
+      } else {
+        MDNS.notifyAPChange();
+        MDNS.announce();
+      }
+    }
+    mdnsWasUp = up;
+    if (mdnsStarted) {
+      MDNS.update();
+    }
+  }
   if (httpServerRunning && httpServer) {
     httpServer->handleClient();
   }

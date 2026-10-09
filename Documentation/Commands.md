@@ -117,7 +117,7 @@ Apps and variables
   Run or manage `.hx` apps
 
 HTTP file server
-- `serve <file> [port]` — Start a simple HTTP server serving the provided file as the index. If not connected to Wi‑Fi the shell will prompt for SSID and password. Returns the device IP and port when started.
+- `serve <file> [port]` — Start a simple HTTP server serving the provided file as the index. If not connected to Wi‑Fi the shell will prompt for SSID and password. Returns the device IP and port when started. While running, the server is also announced on the local network via mDNS as `_http._tcp` (reachable as `<hostname>.local`).
 - `serve stop` — Stop the HTTP server.
 - `serve status` — Show current server status and served file.
 
