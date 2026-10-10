@@ -31,6 +31,7 @@
 #include "utils/http/http_downloader.h"
 #include "api/app_manager.h"
 #include "api/expr.h"
+#include "api/hostname.h"
 #include "api/vars.h"
 #include "api/value_tokens.h"
 #include "api/tz_mapping.h"
@@ -801,7 +802,13 @@ void handleSettings(const TokenizedLine &cmd) {
       Serial.println(F("Usage: settings hostname <name>"));
       return;
     }
-    shellSettings.hostname = cmd.tokens[2];
+    String hn = cmd.tokens[2];
+    hn.toLowerCase();
+    if (!harixos::api::hostname::valid(hn.c_str())) {
+      Serial.println(F("Invalid hostname: use a-z, 0-9, '-' labels separated by '.' (max 63 chars)"));
+      return;
+    }
+    shellSettings.hostname = hn;
     mdnsApplyHostname();
     if (harixos::saveSettings(shellSettings)) {
       Serial.printf("Settings saved. Hostname: %s\r\n", shellSettings.hostname.c_str());

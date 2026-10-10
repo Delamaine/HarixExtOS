@@ -1,5 +1,6 @@
 #include "settings.h"
 
+#include "../../api/hostname.h"
 #include "../../kernel/filesystem/filesystem.h"
 
 namespace harixos {
@@ -16,7 +17,11 @@ String resolveMqttPrefix(const String &prefix) {
 
 String resolveHostname(const String &hostname) {
   if (hostname.length() > 0) {
-    return hostname;
+    String hn = hostname;
+    hn.toLowerCase();
+    if (harixos::api::hostname::valid(hn.c_str())) {
+      return hn;
+    }
   }
   return String("harixos-") + String(ESP.getChipId(), HEX);
 }
