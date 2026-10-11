@@ -44,7 +44,7 @@
 - Consumes: nothing.
 - Produces: `bool harixos::api::hostname::valid(const char *name)` — pure, no Arduino includes, declared in `api/hostname.h`. Task 2 includes this header and lowercases its input before calling.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `test/test_hostname/test_hostname.cpp` following the `test/test_expr/test_expr.cpp` pattern (`#include <unity.h>`, `#include "api/hostname.h"`, `using harixos::api::hostname::valid;`, `main` with `UNITY_BEGIN()` / `RUN_TEST` / `return UNITY_END();`). Tests:
 
@@ -75,12 +75,12 @@ void test_rejects_total_64()          { char n[65]; memset(n, 'a', 63); n[63] = 
 
 Register all 13 in `main`.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `python -m platformio test -e native --filter test_hostname`
 Expected: FAIL to build — `api/hostname.h: No such file or directory`.
 
-- [ ] **Step 3: Implement `bool harixos::api::hostname::valid(const char *name)` in `src/api/hostname.cpp`**
+- [x] **Step 3: Implement `bool harixos::api::hostname::valid(const char *name)` in `src/api/hostname.cpp`**
 
 Header: `namespace harixos { namespace api { namespace hostname { bool valid(const char *name); } } }`, include guard only, no Arduino/C++ std includes beyond `<stddef.h>` if needed. Body decision table (single pass over the string):
 
@@ -92,12 +92,12 @@ Header: `namespace harixos { namespace api { namespace hostname { bool valid(con
 
 (The per-label ≤63 rule is subsumed by total ≤63; do not add a redundant scan.)
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python -m platformio test -e native --filter test_hostname`
 Expected: PASS, 13/13. Then full gates: expect **190/190** (177 existing + 13) and nodemcuv2 SUCCESS (validator not yet linked into firmware — that lands in Task 2).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/api/hostname.h src/api/hostname.cpp test/test_hostname/test_hostname.cpp platformio.ini
@@ -116,19 +116,19 @@ git commit -m "feat(hostname): pure validator for dotted settings hostnames"
 - Consumes: `harixos::api::hostname::valid(const char*)` (Task 1).
 - Produces: error string exactly `Invalid hostname: use a-z, 0-9, '-' labels separated by '.' (max 63 chars)`; `resolveHostname` keeps its `String resolveHostname(const String&)` signature and now returns lowercased-valid-or-default.
 
-- [ ] **Step 1: Wire the CLI path**
+- [x] **Step 1: Wire the CLI path**
 
 In `main.cpp` hostname action (currently assigns `cmd.tokens[2]` raw at :804): copy `cmd.tokens[2]` into a `String`, `toLowerCase()`, and only then assign/save/restart-mDNS as today. On `valid()` false: print the exact error line above and leave the old hostname untouched. Do not alter the existing save + `mdnsApplyHostname` logic.
 
-- [ ] **Step 2: Wire the load/notepad path**
+- [x] **Step 2: Wire the load/notepad path**
 
 `resolveHostname` (settings.cpp:17): if `length() > 0`, `toLowerCase()` a copy and return it when `valid()` passes; otherwise fall through to the existing `harixos-<chipid>` default. Covers file load, `settings reload`, and notepad edits with one guard.
 
-- [ ] **Step 3: Build + flash**
+- [x] **Step 3: Build + flash**
 
 Run gates (expect SUCCESS + 190/190), then upload.
 
-- [ ] **Step 4: Device verification**
+- [x] **Step 4: Device verification**
 
 LF-only sends; expected outputs:
 
@@ -145,7 +145,7 @@ settings hostname test1        → Settings saved. Hostname: test1
 
 Reload fallback: `notepad /harixos/settings.cfg` → edit the `hostname=` line to `.rimu` → `:wq` → `settings reload` → `settings show` → `Hostname: harixos-<chipid>` (the device's default). Restore with `settings hostname test1`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main.cpp src/apps/settings/settings.cpp
@@ -165,7 +165,7 @@ git commit -m "feat(hostname): validate settings hostname on CLI and load paths"
 - Consumes: dotted hostname accepted by `settings hostname` (Task 2); device harness scripts (Global Constraints).
 - Produces: device resolves `esp8266.rimu.local`; patched vendored lib is the compiled `ESP8266mDNS`.
 
-- [ ] **Step 1: RED — capture the broken baseline**
+- [x] **Step 1: RED — capture the broken baseline**
 
 Device is running the Task 2 build with hostname `test1`.
 
@@ -176,7 +176,7 @@ Resolve-DnsName -Type A esp8266.rimu.local
 
 Expected: resolution **FAILS** (name not found / timeout). Record the exact failure text — this is the RED baseline: name accepted, wire format still wrong.
 
-- [ ] **Step 2: Vendor the library**
+- [x] **Step 2: Vendor the library**
 
 ```powershell
 $src = "$env:USERPROFILE\.platformio\packages\framework-arduinoespressif8266\libraries\ESP8266mDNS"
@@ -187,7 +187,7 @@ Copy-Item "$src\library.properties" -Destination lib\ESP8266mDNS\
 
 Skip `examples/`, `keywords.txt`, `README.rst` per spec. Do not modify any file yet.
 
-- [ ] **Step 3: Patch `_buildDomainForHost` (vendored copy only)**
+- [x] **Step 3: Patch `_buildDomainForHost` (vendored copy only)**
 
 Signature unchanged: `bool MDNSResponder::_buildDomainForHost(const char *p_pcHostname, stcMDNS_RRDomain &p_rHostDomain) const`. Replace the body's single `addLabel(p_pcHostname)` with a loop over dot-separated segments:
 
@@ -211,11 +211,11 @@ Preceded by the provenance comment:
 
 No other file in `lib/ESP8266mDNS/` may differ from upstream.
 
-- [ ] **Step 4: Gates + flash**
+- [x] **Step 4: Gates + flash**
 
 Run full gates → SUCCESS + 190/190 (a successful build does **not** prove lib precedence — only Step 6 does). Then upload. The device still has `hostname=esp8266.rimu` from Step 1.
 
-- [ ] **Step 5: GREEN — resolution**
+- [x] **Step 5: GREEN — resolution**
 
 > **Amended 2026-10-11:** Windows only multicasts mDNS for two-label names
 > (`x.local`); for `x.y.local` it fails via unicast DNS without ever sending an
@@ -236,7 +236,7 @@ never answers it). The Windows mDNS path itself is covered by Step 7's
 `Resolve-DnsName test1.local`. If the probe fails while the patch looks right,
 investigate LDF precedence first (which `ESP8266mDNS` got linked).
 
-- [ ] **Step 6: GREEN — service chain + HTTP**
+- [x] **Step 6: GREEN — service chain + HTTP**
 
 `serve <existing-file> 8266` (pick any file already on LittleFS; if Wi-Fi prompts appear, it is already connected — proceed). Then raw UDP PTR probe for `_http._tcp.local` (adapt the P5 probe pattern in `mdns_t3.py`: bind :5353, join 224.0.0.251 group, send query, filter QR-bit responses). Assert the response chain contains:
 
@@ -248,14 +248,14 @@ esp8266.rimu.local A → device IP
 
 Then `curl --resolve esp8266.rimu.local:8266:192.168.20.26 http://esp8266.rimu.local:8266/` → HTTP 200 with file content (`--resolve` because Windows cannot resolve the dotted name itself, same limitation as Step 5; the raw probe already proved name→IP on the wire). Finally `serve stop`.
 
-- [ ] **Step 7: Restore + single-label regression**
+- [x] **Step 7: Restore + single-label regression**
 
 ```
 settings hostname test1                        → Settings saved. Hostname: test1
 Resolve-DnsName -Type A test1.local            → device IP
 ```
 
-- [ ] **Step 8: Full harness regression**
+- [x] **Step 8: Full harness regression**
 
 ```powershell
 python C:\Users\delam\AppData\Local\Temp\opencode\mdns_t2.py    # expect 33/33
@@ -264,11 +264,11 @@ python C:\Users\delam\AppData\Local\Temp\opencode\mdns_t3.py green  # expect 17/
 
 (LF-only rule applies inside the harnesses; they already follow it. If COM3 access is denied, close the serial monitor.)
 
-- [ ] **Step 9: Docs**
+- [x] **Step 9: Docs**
 
 `Documentation/Commands.md:109` — append to the settings line: `; dotted hostnames supported (e.g. esp8266.rimu → esp8266.rimu.local; resolves via mDNS on macOS/Linux — Windows natively resolves only two-label .local names)`.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add lib/ESP8266mDNS Documentation/Commands.md
