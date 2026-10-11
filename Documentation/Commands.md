@@ -106,7 +106,7 @@ There is no `format` command; LittleFS is formatted at provision time.
 
 Apps and variables
 - `notepad <path>` — Open interactive line editor
-- `settings` — Show and edit persistent shell settings (`settings show|banner|timezone|tz|hostname|update|save|reload`)
+- `settings` — Show and edit persistent shell settings (`settings show|banner|timezone|tz|hostname|update|save|reload`); dotted hostnames supported (e.g. `esp8266.rimu` → `esp8266.rimu.local`; resolves via mDNS on macOS/Linux — Windows natively resolves only two-label `.local` names)
 - `calc <expr>` — Evaluate arithmetic expressions
 - `set <name> = <expr>` — Store a script variable usable as `$name`
 - `vars [list|set|get|del|save|load|clear]` — Global variable store
