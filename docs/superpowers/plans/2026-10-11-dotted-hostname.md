@@ -217,13 +217,24 @@ Run full gates → SUCCESS + 190/190 (a successful build does **not** prove lib 
 
 - [ ] **Step 5: GREEN — resolution**
 
+> **Amended 2026-10-11:** Windows only multicasts mDNS for two-label names
+> (`x.local`); for `x.y.local` it fails via unicast DNS without ever sending an
+> mDNS query (controlled sniff: fresh `fresh.rimu.local` → zero packets on all
+> interfaces; `esprimu.local` → immediate queries; known Windows limitation,
+> not fixable client-side). `Resolve-DnsName esp8266.rimu.local` therefore
+> cannot pass — GREEN uses a spec-compliant raw mDNS A probe instead.
+
 ```
-Resolve-DnsName -Type A esp8266.rimu.local   → returns the device IP (e.g. 192.168.20.26)
-settings show                                → Hostname: esp8266.rimu
-info                                          → mDNS: esp8266.rimu.local
+raw mDNS A probe: esp8266.rimu.local → answer 192.168.20.26 (from 192.168.20.26:5353)
+settings show                        → Hostname: esp8266.rimu
+info                                  → mDNS: esp8266.rimu.local
 ```
 
-This single pass proves three things at once: Windows multicasts multi-label `.local`, the patched code is the compiled code (precedence), and the split labels match client queries. If it fails while the patch looks right, investigate LDF precedence first (which `ESP8266mDNS` got linked).
+A split-label query can only be answered by the patched `_buildDomainForHost`
+(this proves lib precedence + correct label split — a single-label responder
+never answers it). The Windows mDNS path itself is covered by Step 7's
+`Resolve-DnsName test1.local`. If the probe fails while the patch looks right,
+investigate LDF precedence first (which `ESP8266mDNS` got linked).
 
 - [ ] **Step 6: GREEN — service chain + HTTP**
 
@@ -235,7 +246,7 @@ esp8266.rimu._http._tcp.local  SRV  esp8266.rimu.local:8266
 esp8266.rimu.local A → device IP
 ```
 
-Then `curl http://esp8266.rimu.local:8266/` → HTTP 200 with file content. Finally `stop` the server.
+Then `curl --resolve esp8266.rimu.local:8266:192.168.20.26 http://esp8266.rimu.local:8266/` → HTTP 200 with file content (`--resolve` because Windows cannot resolve the dotted name itself, same limitation as Step 5; the raw probe already proved name→IP on the wire). Finally `serve stop`.
 
 - [ ] **Step 7: Restore + single-label regression**
 
@@ -255,7 +266,7 @@ python C:\Users\delam\AppData\Local\Temp\opencode\mdns_t3.py green  # expect 17/
 
 - [ ] **Step 9: Docs**
 
-`Documentation/Commands.md:109` — append to the settings line: `; dotted hostnames are supported and resolve under .local (e.g. esp8266.rimu)`.
+`Documentation/Commands.md:109` — append to the settings line: `; dotted hostnames supported (e.g. esp8266.rimu → esp8266.rimu.local; resolves via mDNS on macOS/Linux — Windows natively resolves only two-label .local names)`.
 
 - [ ] **Step 10: Commit**
 
