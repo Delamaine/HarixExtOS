@@ -19,7 +19,7 @@
 - Validation rules (spec): lowercase-first at call sites via `String::toLowerCase()`; valid = `[a-z0-9-]` chars, no empty/leading/trailing dots, total length (dots included) ≤ 63 — matching stock `_setHostname`'s budget so the lib's own check stays untouched.
 - Vendored library: `lib/ESP8266mDNS/` copied from `framework-arduinoespressif8266/libraries/ESP8266mDNS` (version 1.2); **only** `_buildDomainForHost` may differ from upstream; provenance comment required above the patch.
 - `Resolve-DnsName` performs mDNS only for A/AAAA `.local` names — service-chain checks must use the raw UDP PTR probe pattern (see Task 3).
-- Existing device harnesses: `C:\Users\delam\AppData\Local\Temp\opencode\mdns_t2.py` (33 checks) and `mdns_t3.py` (modes `red`/`green`, 17 checks).
+- Device harnesses (committed under `test/scripts/`): `mdns_t2.py` (33 checks), `mdns_t3.py` (modes `red`/`green`, 17 checks), `mdns_step6.py` (dotted service chain + curl `--resolve`), `mdns_step7.py` (raw dotted A probe + `test1` restore).
 - Device hostname must end the plan back at `test1`.
 - No new dependencies, no TXT/AP-mode changes, ESP32 out of scope.
 
@@ -258,8 +258,8 @@ Resolve-DnsName -Type A test1.local            → device IP
 - [x] **Step 8: Full harness regression**
 
 ```powershell
-python C:\Users\delam\AppData\Local\Temp\opencode\mdns_t2.py    # expect 33/33
-python C:\Users\delam\AppData\Local\Temp\opencode\mdns_t3.py green  # expect 17/17
+python test\scripts\mdns_t2.py    # expect 33/33
+python test\scripts\mdns_t3.py green  # expect 17/17
 ```
 
 (LF-only rule applies inside the harnesses; they already follow it. If COM3 access is denied, close the serial monitor.)
