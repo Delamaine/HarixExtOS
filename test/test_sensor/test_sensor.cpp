@@ -31,6 +31,12 @@ static void test_parse_type(void) {
   TEST_ASSERT_EQUAL_UINT(kSensorDs18b20, t);
   TEST_ASSERT_TRUE(sensorParseType("bme280", &t));
   TEST_ASSERT_EQUAL_UINT(kSensorBme280, t);
+  TEST_ASSERT_TRUE(sensorParseType("soil", &t));
+  TEST_ASSERT_EQUAL_UINT(kSensorSoil, t);
+  TEST_ASSERT_TRUE(sensorParseType("ldr", &t));
+  TEST_ASSERT_EQUAL_UINT(kSensorLdr, t);
+  TEST_ASSERT_TRUE(sensorParseType("bh1750", &t));
+  TEST_ASSERT_EQUAL_UINT(kSensorBh1750, t);
   TEST_ASSERT_FALSE(sensorParseType("temprature", &t));
   TEST_ASSERT_FALSE(sensorParseType("", &t));
   TEST_ASSERT_EQUAL_STRING("dht22", sensorTypeName(kSensorDht22));
@@ -69,6 +75,16 @@ static void test_quantities_units_classes(void) {
   TEST_ASSERT_EQUAL_STRING("temperature", sensorDeviceClass(t, kQtyTemperature));
   TEST_ASSERT_EQUAL_STRING("cm", sensorUnit(t, kQtyDistance));
   TEST_ASSERT_EQUAL_STRING("hPa", sensorUnit(t, kQtyPressure));
+  TEST_ASSERT_TRUE(sensorHasQuantity(kSensorSoil, kQtyMoisture));
+  TEST_ASSERT_TRUE(sensorHasQuantity(kSensorLdr, kQtyIlluminance));
+  TEST_ASSERT_TRUE(sensorHasQuantity(kSensorBh1750, kQtyIlluminance));
+  TEST_ASSERT_FALSE(sensorHasQuantity(kSensorSoil, kQtyIlluminance));
+  TEST_ASSERT_EQUAL_STRING("%", sensorUnit(kSensorSoil, kQtyMoisture));
+  TEST_ASSERT_EQUAL_STRING("%", sensorUnit(kSensorLdr, kQtyIlluminance));
+  TEST_ASSERT_EQUAL_STRING("lx", sensorUnit(kSensorBh1750, kQtyIlluminance));
+  TEST_ASSERT_EQUAL_STRING("moisture", sensorDeviceClass(kSensorSoil, kQtyMoisture));
+  TEST_ASSERT_EQUAL_STRING("illuminance", sensorDeviceClass(kSensorBh1750, kQtyIlluminance));
+  TEST_ASSERT_EQUAL_STRING("", sensorDeviceClass(kSensorLdr, kQtyIlluminance));
 }
 
 static void test_set_and_format_reading(void) {
@@ -152,6 +168,33 @@ static void test_parse_line_rejects_malformed(void) {
   TEST_ASSERT_FALSE(sensorParseLine("door|ultrasonic|0|6", &out));
   TEST_ASSERT_FALSE(sensorParseLine("garage|dht22|4x|0", &out));
   TEST_ASSERT_FALSE(sensorParseLine("garage|dht22|260|0", &out));
+  TEST_ASSERT_FALSE(sensorParseLine("soil1|soil|4|0", &out));
+  TEST_ASSERT_FALSE(sensorParseLine("soil1|soil|0|0", &out));
+  TEST_ASSERT_FALSE(sensorParseLine("ldr1|ldr|16|0", &out));
+  TEST_ASSERT_FALSE(sensorParseLine("lux|bh1750|17|0", &out));
+}
+
+static void test_parse_line_soil_a0(void) {
+  SensorDef out = {};
+  TEST_ASSERT_TRUE(sensorParseLine("soil1|soil|17|0", &out));
+  TEST_ASSERT_EQUAL_UINT(kSensorSoil, out.type);
+  TEST_ASSERT_EQUAL_UINT(17, out.a);
+  TEST_ASSERT_TRUE(isnan(out.moisture));
+  SensorDef d = out;
+  char line[64];
+  sensorPersistLine(d, line, sizeof(line));
+  TEST_ASSERT_EQUAL_STRING("soil1|soil|17|0", line);
+}
+
+static void test_discovery_payload_ldr_no_class(void) {
+  char out[256];
+  TEST_ASSERT_TRUE(sensorDiscoveryPayload(
+      "haps", "harixos/x", "garden", kSensorLdr, kQtyIlluminance, out, sizeof(out)));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"name\":\"haps_garden_illuminance\",\"state_topic\":\"harixos/x/sensor/garden/illuminance\","
+      "\"unit_of_measurement\":\"%\","
+      "\"uniq_id\":\"haps_sensor_garden_illuminance\",\"dev\":{\"ids\":\"haps\"}}",
+      out);
 }
 
 int main(int argc, char **argv) {
@@ -163,6 +206,8 @@ int main(int argc, char **argv) {
   RUN_TEST(test_set_and_format_reading);
   RUN_TEST(test_persist_line_roundtrip);
   RUN_TEST(test_parse_line_rejects_malformed);
+  RUN_TEST(test_parse_line_soil_a0);
+  RUN_TEST(test_discovery_payload_ldr_no_class);
   RUN_TEST(test_discovery_payload_field_exact);
   RUN_TEST(test_discovery_payload_bme_pressure);
   RUN_TEST(test_discovery_payload_ultrasonic_distance);

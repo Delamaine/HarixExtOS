@@ -11,6 +11,7 @@
 namespace harixos { namespace iot {
 
 using harixos::api::API_INVALID_PIN;
+using harixos::api::API_INVALID_ARGUMENT;
 using harixos::api::API_DUPLICATE;
 using harixos::api::API_ERROR;
 using harixos::api::API_OK;
@@ -30,7 +31,8 @@ static bool isPinValid(uint8_t pin) {
 }
 
 ApiResult registerOnchange(uint8_t pin, EdgeMode edgeMode,
-                           std::function<void(uint8_t pin, bool level)> callback) {
+                           std::function<void(uint8_t pin, bool level)> callback,
+                           BinaryClass deviceClass) {
   if (!isPinValid(pin)) {
     return ApiResult(API_INVALID_PIN, "GPIO" + String(pin) + " is reserved or invalid");
   }
@@ -46,6 +48,7 @@ ApiResult registerOnchange(uint8_t pin, EdgeMode edgeMode,
   }
   s_rules[idx].pin = pin;
   s_rules[idx].edgeMode = edgeMode;
+  s_rules[idx].deviceClass = deviceClass;
   s_rules[idx].callback = callback;
   s_rules[idx].active = true;
   s_rules[idx].debounce = DebounceState{false, false, false, 0};
@@ -81,6 +84,8 @@ String collectActiveRulePins() {
     if (!s_rules[i].active) continue;
     if (pins.length() > 0) pins += F(",");
     pins += String(s_rules[i].pin);
+    pins += F(" ");
+    pins += binaryClassToken(s_rules[i].deviceClass);
   }
   return pins;
 }
@@ -142,7 +147,8 @@ bool saveOnchangeRules() {
   if (!f) return false;
   for (uint8_t i = 0; i < s_ruleCount; ++i) {
     if (!s_rules[i].active) continue;
-    f.printf("%u %s\r\n", s_rules[i].pin, edgeModeToString(s_rules[i].edgeMode).c_str());
+    f.printf("%u %s %s\r\n", s_rules[i].pin, edgeModeToString(s_rules[i].edgeMode).c_str(),
+            binaryClassToken(s_rules[i].deviceClass));
   }
   f.close();
   return true;
@@ -156,19 +162,29 @@ bool loadOnchangeRules() {
     line.trim();
     if (line.length() == 0) continue;
     uint8_t pin;
-    String modeStr;
+    String modeStr = "both";
+    String classStr;
     int space = line.indexOf(' ');
     if (space > 0) {
       pin = line.substring(0, space).toInt();
-      modeStr = line.substring(space + 1);
+      int space2 = line.indexOf(' ', space + 1);
+      if (space2 > 0) {
+        modeStr = line.substring(space + 1, space2);
+        classStr = line.substring(space2 + 1);
+      } else {
+        modeStr = line.substring(space + 1);
+      }
     } else {
       pin = line.toInt();
-      modeStr = "both";
+    }
+    BinaryClass cls = BinaryClass::Motion;
+    if (classStr.length() > 0 && !parseBinaryClass(classStr.c_str(), cls)) {
+      continue;  // corrupt line
     }
     if (isPinValid(pin)) {
       registerOnchange(pin, stringToEdgeMode(modeStr), [](uint8_t p, bool l) {
         (void)p; (void)l;
-      });
+      }, cls);
     }
   }
   f.close();
@@ -190,7 +206,8 @@ void listOnchangeRules(Stream &output) {
   output.println(F("Onchange rules:"));
   for (uint8_t i = 0; i < s_ruleCount; ++i) {
     if (!s_rules[i].active) continue;
-    output.printf("  GPIO%u: %s\r\n", s_rules[i].pin, edgeModeToString(s_rules[i].edgeMode).c_str());
+    output.printf("  GPIO%u: %s %s\r\n", s_rules[i].pin, edgeModeToString(s_rules[i].edgeMode).c_str(),
+                  binaryClassToken(s_rules[i].deviceClass));
   }
 }
 
@@ -200,6 +217,8 @@ ApiResult shellAddOnchange(const String &args, Stream &output) {
   rest = rest.substring(pinStr.length());
   rest.trim();
   String modeStr = rest.substring(0, rest.indexOf(' '));
+  rest = rest.substring(modeStr.length());
+  rest.trim();
   pinStr.trim();
   modeStr.trim();
 
@@ -210,15 +229,25 @@ ApiResult shellAddOnchange(const String &args, Stream &output) {
     pin = pinStr.toInt();
   }
 
+  BinaryClass cls = BinaryClass::Motion;
+  if (rest.length() > 0) {
+    rest.toLowerCase();
+    if (!parseBinaryClass(rest.c_str(), cls)) {
+      return ApiResult(API_INVALID_ARGUMENT,
+                       "Unknown device class '" + rest + "'. Use: motion|occupancy|door|window|moisture");
+    }
+  }
+
   EdgeMode mode = stringToEdgeMode(modeStr);
   ApiResult result = registerOnchange(pin, mode, [](uint8_t p, bool l) {
     (void)p; (void)l;
-  });
+  }, cls);
   if (!result.isError()) {
     saveOnchangeRules();
     // A new edge pin must reach HA even though discovery already ran once.
     invalidateDiscovery();
-    output.printf("Added onchange rule: GPIO%u %s\r\n", pin, edgeModeToString(mode).c_str());
+    output.printf("Added onchange rule: GPIO%u %s %s\r\n", pin, edgeModeToString(mode).c_str(),
+                  binaryClassToken(cls));
   }
   return result;
 }

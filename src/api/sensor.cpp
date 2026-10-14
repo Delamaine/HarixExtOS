@@ -57,6 +57,8 @@ static float qtyValue(const SensorDef& d, uint8_t q) {
     case kQtyTemperature: return d.temperature;
     case kQtyHumidity: return d.humidity;
     case kQtyPressure: return d.pressure;
+    case kQtyMoisture: return d.moisture;
+    case kQtyIlluminance: return d.illuminance;
     default: return NAN;
   }
 }
@@ -257,6 +259,33 @@ static bool readBme280(SensorDef& d) {
   return true;
 }
 
+static bool readAnalog(SensorDef& d, uint8_t qty) {
+  int raw = analogRead(A0);  // 0..1023, 1.0V max on bare ESP8266EX
+  sensorSetReading(d, qty, raw * 100.0f / 1023.0f);
+  return true;
+}
+
+// ===== BH1750 over I2C (hand-rolled, no lib) =====
+// One-shot high-res mode (0x21) per datasheet: 120 ms conversion, 2 raw bytes,
+// lux = raw / 1.2. Address 0x23 (ADDR pin low, the common module default).
+
+static bool readBh1750(SensorDef& d) {
+  Wire.beginTransmission(0x23);
+  Wire.write(0x21);
+  if (Wire.endTransmission() != 0) {
+    s_lastReadError = "no BH1750 on I2C";
+    return false;
+  }
+  delay(120);
+  if (Wire.requestFrom((uint8_t)0x23, (uint8_t)2) < 2) {
+    s_lastReadError = "BH1750 read failed";
+    return false;
+  }
+  uint16_t raw = ((uint16_t)Wire.read() << 8) | (uint16_t)Wire.read();
+  sensorSetReading(d, kQtyIlluminance, (float)raw / 1.2f);
+  return true;
+}
+
 static bool readSensor(int idx) {
   s_lastReadError = nullptr;
   SensorDef& d = s_pool[idx];
@@ -265,6 +294,9 @@ static bool readSensor(int idx) {
     case kSensorDht22: return readDht(d, idx);
     case kSensorDs18b20: return readDs18b20(d);
     case kSensorBme280: return readBme280(d);
+    case kSensorSoil: return readAnalog(d, kQtyMoisture);
+    case kSensorLdr: return readAnalog(d, kQtyIlluminance);
+    case kSensorBh1750: return readBh1750(d);
     default: return false;
   }
 }
@@ -296,10 +328,15 @@ static ApiResult registerSensor(uint8_t type, uint8_t a, uint8_t b,
   }
   // Pin rules mirror sensorParseLine so a persisted line is never accepted at
   // load and rejected at register (or vice versa): pinned types need a nonzero
-  // GPIO, ultrasonic needs a real echo pin, bme280 takes no pins at all.
-  if (type == kSensorBme280) {
+  // GPIO, ultrasonic needs a real echo pin, bme280/bh1750 take no pins at all,
+  // soil/ldr use A0 (17) only.
+  if (type == kSensorBme280 || type == kSensorBh1750) {
     if (a != 0 || b != 0) {
-      return ApiResult(API_INVALID_ARGUMENT, "bme280 takes no pins");
+      return ApiResult(API_INVALID_ARGUMENT, String(sensorTypeName(type)) + " takes no pins");
+    }
+  } else if (type == kSensorSoil || type == kSensorLdr) {
+    if (a != 17) {
+      return ApiResult(API_INVALID_PIN, "soil/ldr sensors use A0 only");
     }
   } else {
     if (a == 0 || (type == kSensorUltrasonic && b == 0)) {
@@ -319,10 +356,10 @@ static ApiResult registerSensor(uint8_t type, uint8_t a, uint8_t b,
   if (pinsConflict(type, a, b)) {
     return ApiResult(API_DUPLICATE, "sensor already registered for those pins");
   }
-  if (type == kSensorBme280) {
+  if (type == kSensorBme280 || type == kSensorBh1750) {
     for (int i = 0; i < SensorAPI::kMaxSensors; ++i) {
-      if (s_inited[i] && s_pool[i].type == kSensorBme280) {
-        return ApiResult(API_DUPLICATE, "bme280 already registered");
+      if (s_inited[i] && s_pool[i].type == type) {
+        return ApiResult(API_DUPLICATE, String(sensorTypeName(type)) + " already registered");
       }
     }
   }
@@ -342,6 +379,8 @@ static ApiResult registerSensor(uint8_t type, uint8_t a, uint8_t b,
       d.humidity = NAN;
       d.pressure = NAN;
       d.distance = NAN;
+      d.moisture = NAN;
+      d.illuminance = NAN;
       s_inited[i] = true;
       invalidateDiscovery();
       if (out) {
@@ -396,6 +435,8 @@ static void printReadings(int idx, Stream& out) {
   } else if (d.type == kSensorDht22 || d.type == kSensorDs18b20) {
     out.printf(" GPIO%d", d.a);
     if (d.type == kSensorDs18b20 && d.b > 0) out.printf(" #%d", d.b);
+  } else if (d.type == kSensorSoil || d.type == kSensorLdr) {
+    out.printf(" A0");
   }
   for (uint8_t q = 0; q < kSensorQtyCount; ++q) {
     if (!sensorHasQuantity(d.type, q)) continue;
@@ -503,7 +544,7 @@ static ApiResult doRegister(const String& tail, Stream& out) {
   int sp = tail.indexOf(' ');
   if (sp < 0) {
     return ApiResult(API_INVALID_ARGUMENT,
-                     "Usage: sensor register <ultrasonic <t> <e>|dht22 <pin>|ds18b20 <pin> [index]|bme280> <name>");
+                     "Usage: sensor register <ultrasonic <t> <e>|dht22 <pin>|ds18b20 <pin> [index]|bme280|soil A0|ldr A0|bh1750> <name>");
   }
   String typeStr = tail.substring(0, sp);
   typeStr.trim();
@@ -514,7 +555,7 @@ static ApiResult doRegister(const String& tail, Stream& out) {
   uint8_t type;
   if (!sensorParseType(typeStr.c_str(), &type)) {
     return ApiResult(API_INVALID_ARGUMENT,
-                     "Usage: sensor register <ultrasonic <t> <e>|dht22 <pin>|ds18b20 <pin> [index]|bme280> <name>");
+                     "Usage: sensor register <ultrasonic <t> <e>|dht22 <pin>|ds18b20 <pin> [index]|bme280|soil A0|ldr A0|bh1750> <name>");
   }
 
   uint8_t a = 0;
@@ -567,7 +608,20 @@ static ApiResult doRegister(const String& tail, Stream& out) {
       }
       nameStr = rest.substring(sp2 + 1);
     }
-  } else {  // bme280: no pins
+  } else if (type == kSensorSoil || type == kSensorLdr) {
+    int sp1 = rest.indexOf(' ');
+    if (sp1 < 0) {
+      return ApiResult(API_INVALID_ARGUMENT, "Usage: sensor register soil|ldr A0 <name>");
+    }
+    String pinTok = rest.substring(0, sp1);
+    pinTok.trim();
+    pinTok.toLowerCase();
+    if (pinTok != "a0" && pinTok != "17") {
+      return ApiResult(API_INVALID_PIN, "soil/ldr sensors use A0 only");
+    }
+    a = 17;  // A0: the only analog-capable pin on ESP8266
+    nameStr = rest.substring(sp1 + 1);
+  } else {  // bme280 / bh1750: no pins
     nameStr = rest;
   }
   nameStr.trim();

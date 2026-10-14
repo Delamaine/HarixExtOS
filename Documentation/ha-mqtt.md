@@ -393,6 +393,9 @@ sensor register ultrasonic <trigger> <echo> <name>   # HC-SR04
 sensor register dht22 <pin> <name>                   # DHT22
 sensor register ds18b20 <pin> [index] <name>         # DS18B20 (daisy-chain index)
 sensor register bme280 <name>                        # BME280/BMP280 (I2C; probed 0x76/0x77)
+sensor register soil A0 <name>                       # capacitive soil moisture (ADC A0, %)
+sensor register ldr A0 <name>                        # photoresistor divider (ADC A0, %)
+sensor register bh1750 <name>                        # BH1750 digital lux sensor (I2C 0x23)
 sensor unregister <name>
 sensor list                                          # bare `sensor` lists too
 sensor read <name>                                   # read now, print all quantities
@@ -407,16 +410,21 @@ State topics, per measured quantity, retained:
 | temperature | `<prefix>/sensor/<name>/temperature` | °C | `temperature` |
 | humidity | `<prefix>/sensor/<name>/humidity` | % | `humidity` |
 | pressure | `<prefix>/sensor/<name>/pressure` | hPa | `pressure` |
+| moisture | `<prefix>/sensor/<name>/moisture` | % | `moisture` |
+| illuminance | `<prefix>/sensor/<name>/illuminance` | lx | `illuminance` |
+| illuminance | `<prefix>/sensor/<name>/illuminance` | % | (none — HA rejects `%` illuminance) |
 
 Per-quantity coverage: ultrasonic → distance; DHT22 → temperature + humidity;
-DS18B20 → temperature; BME280 → temperature + humidity + pressure. On a BMP280
+DS18B20 → temperature; BME280 → temperature + humidity + pressure; soil →
+moisture; ldr → illuminance; BH1750 → illuminance. On a BMP280
 (chip id 0x58, temperature + pressure only) the humidity entity is still
 registered but stays `unknown` in HA until real BME280 silicon is attached.
 
 Behaviour of the current implementation:
 
 - Sensors are registered by name (1-15 chars `[A-Za-z0-9_-]`), validated via
-  `GpioAPI::isAvailablePin` for pinned types, persisted to `/sensors.conf`
+  `GpioAPI::isAvailablePin` for pinned types (soil/ldr accept only the `A0`
+  token — ESP8266's sole analog input), persisted to `/sensors.conf`
   (maximum 8). Malformed lines are skipped with a warning at boot.
 - `sensor publish` reads all registered sensors (or one) and publishes the
   cached readings retained; a failed quantity keeps its previous retained

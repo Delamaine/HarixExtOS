@@ -1,6 +1,8 @@
 #include "gpio_api.h"
 
 #include "pins.h"
+#include "motor.h"
+#include "servo.h"
 
 namespace harixos {
 namespace api {
@@ -99,6 +101,48 @@ ApiResult GpioAPI::pulse(uint8_t pin, int count, int delayMs) {
   }
   
   return ApiResult(API_OK, "GPIO" + String(pin) + " pulsed " + String(count) + " times");
+}
+
+ApiResult GpioAPI::beep(const String &args, Stream &out) {
+  String rest = args;
+  String pinTok = rest.substring(0, rest.indexOf(' '));
+  pinTok.trim();
+  rest = rest.substring(pinTok.length());
+  rest.trim();
+  String hzTok = rest.substring(0, rest.indexOf(' '));
+  hzTok.trim();
+  String msTok = rest.substring(hzTok.length());
+  msTok.trim();
+  if (pinTok.length() == 0) {
+    return ApiResult(API_INVALID_ARGUMENT, "Usage: beep <pin> [hz] [ms]");
+  }
+  int pin = pinTok.toInt();
+  int hz = hzTok.length() ? hzTok.toInt() : 1000;
+  int ms = msTok.length() ? msTok.toInt() : 200;
+  if (!isAvailablePin(pin)) {
+    return ApiResult(API_INVALID_PIN, "GPIO" + String(pin) + " is reserved or invalid");
+  }
+  // ponytail: tone() collides with ledc/servo drivers; check live users.
+  if (ServoAPI::findByPin(static_cast<uint8_t>(pin))) {
+    return ApiResult(API_INVALID_ARGUMENT, "GPIO" + String(pin) + " is attached to a servo");
+  }
+  for (int i = 0; i < MotorAPI::kMaxMotors; ++i) {
+    MotorAPI *m = MotorAPI::findByIndex(static_cast<uint8_t>(i));
+    if (m && m->initialized() &&
+        (m->config().namePin == pin || m->config().speedPin == pin)) {
+      return ApiResult(API_INVALID_ARGUMENT, "GPIO" + String(pin) + " is used by a motor");
+    }
+  }
+  if (hz < 37 || hz > 5000) {
+    return ApiResult(API_INVALID_ARGUMENT, "hz must be 37-5000");
+  }
+  if (ms < 10 || ms > 10000) {
+    return ApiResult(API_INVALID_ARGUMENT, "ms must be 10-10000");
+  }
+  tone(static_cast<uint8_t>(pin), static_cast<unsigned int>(hz));
+  delay(static_cast<unsigned long>(ms));
+  noTone(static_cast<uint8_t>(pin));
+  return ApiResult(API_OK, "Beep GPIO" + String(pin) + " " + String(hz) + "Hz " + String(ms) + "ms");
 }
 
 bool GpioAPI::isPwmPin(uint8_t pin) {

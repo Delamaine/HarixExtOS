@@ -591,6 +591,8 @@ ApiResult ScriptEngine::executeCommand(const String &command, Stream &output) {
     return SensorAPI::runCommand(cmd.args, output);
   } else if (cmd.name == "motor") {
     return MotorAPI::runCommand(cmd.args, output);
+  } else if (cmd.name == "beep") {
+    return GpioAPI::beep(cmd.args, output);
   } else if (cmd.name.startsWith("/") || cmd.name.endsWith(".hx")) {
     // Treat as script path if it looks like one
     return handleRunCommand(command, output);
@@ -797,8 +799,9 @@ void ScriptEngine::printHelp(Stream &output) {
   output.println();
   output.println(F("Drivers:"));
   output.println(F("  servo attach|detach|write <pin> <angle>|read <pin>|list"));
-  output.println(F("  sensor register <ultrasonic <t> <e>|dht22 <pin>|ds18b20 <pin> [idx]|bme280> <name>|unregister <name>|list|read <name>|publish [name]|init <t> <e>|ping [t] [e]|read [echo]|list"));
+  output.println(F("  sensor register <ultrasonic <t> <e>|dht22 <pin>|ds18b20 <pin> [idx]|bme280|soil A0|ldr A0|bh1750> <name>|unregister <name>|list|read <name>|publish [name]|init <t> <e>|ping [t] [e]|read [echo]|list"));
   output.println(F("  motor init|forward|reverse|stop|brake|speed <0-100>|list"));
+  output.println(F("  beep <pin> [hz] [ms]    Buzzer beep (default 1000Hz 200ms)"));
   output.println();
   output.println(F("Other:"));
   output.println(F("  set <name> = <expr>     Assign a variable"));

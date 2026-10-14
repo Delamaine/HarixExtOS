@@ -17,15 +17,17 @@ constexpr const char* kRulesPath = "/onchange.rules";
 struct OnchangeRule {
   uint8_t pin;
   EdgeMode edgeMode;
+  BinaryClass deviceClass;
   DebounceState debounce;
   std::function<void(uint8_t pin, bool level)> callback;
   bool active;
 };
 
-// Register a callback for a pin with given edge mode.
+// Register a callback for a pin with given edge mode and HA binary_sensor class.
 // Returns API_OK on success, API_INVALID_ARGUMENT on duplicate/invalid.
 ApiResult registerOnchange(uint8_t pin, EdgeMode edgeMode,
-                           std::function<void(uint8_t pin, bool level)> callback);
+                           std::function<void(uint8_t pin, bool level)> callback,
+                           BinaryClass deviceClass = BinaryClass::Motion);
 
 // Remove registration for a pin.
 ApiResult unregisterOnchange(uint8_t pin);
@@ -36,7 +38,7 @@ bool hasOnchangeRule(uint8_t pin);
 // Get edge mode for a pin (returns Both if not found).
 EdgeMode getEdgeMode(uint8_t pin);
 
-// Collect pins of active rules as a comma-separated string (e.g. "2,4").
+// Collect active rules as "pin class" entries, comma-separated (e.g. "2 motion,4 door").
 // Used for HA binary_sensor discovery.
 String collectActiveRulePins();
 

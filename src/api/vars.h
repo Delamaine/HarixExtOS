@@ -8,7 +8,7 @@ namespace vars {
 
 constexpr size_t kMaxVars = 16;
 constexpr size_t kMaxNameLength = 16;
-constexpr size_t kMaxStringValue = 64;
+constexpr size_t kMaxStringValue = 32;
 constexpr size_t kPersistPathLength = 64;
 inline const char* kPersistPath = "/vars.dat";
 

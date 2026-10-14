@@ -2,7 +2,7 @@ HarixOS Shell Commands
 =======================
 
 Core shell commands
-- `help [topic]` — Show help and command list (`help wifi|gpio|i2c|fs|serve|post|mqtt|onchange|relay|time|schedule|update|sensor|servo|motor|run|calc|set|vars|settings|powerprofile|cpufreq`)
+- `help [topic]` — Show help and command list (`help wifi|gpio|i2c|fs|serve|post|mqtt|onchange|relay|time|schedule|update|sensor|servo|motor|beep|run|calc|set|vars|settings|powerprofile|cpufreq`)
 - `about` — Show version and feature list
 - `info` — Show system (incl. supply voltage VCC in mV when the firmware is built with `ADC_MODE(ADC_VCC)`, otherwise `n/a`), WiFi, GPIO, filesystem, last reset and (if synced) current time
 - `chip` — Show chip and flash details
@@ -107,12 +107,13 @@ There is no `format` command; LittleFS is formatted at provision time.
 Apps and variables
 - `notepad <path>` — Open interactive line editor
 - `settings` — Show and edit persistent shell settings (`settings show|banner|timezone|tz|hostname|update|save|reload`); dotted hostnames supported (e.g. `esp8266.rimu` → `esp8266.rimu.local`; resolves via mDNS on macOS/Linux — Windows natively resolves only two-label `.local` names)
-- `calc <expr>` — Evaluate arithmetic expressions
+- `calc <expr>` — Evaluate arithmetic expressions (max 64 tokens per expression)
 - `set <name> = <expr>` — Store a script variable usable as `$name`
 - `vars [list|set|get|del|save|load|clear]` — Global variable store
   (persisted to `/vars.dat`; `vars set <name>=<value>`, `vars get <name>`,
-  `vars del <name>`, `vars save`, `vars load`, `vars clear`). Also a script
-  keyword, so it works in `.hx` files, `schedule add` and MQTT `shell/in`.
+  `vars del <name>`, `vars save`, `vars load`, `vars clear`). Limits: max 16
+  variables, names up to 16 characters, string values up to 31 characters.
+  Also a script keyword, so it works in `.hx` files, `schedule add` and MQTT `shell/in`.
 - `run <path>` / `run list` / `run install <name>` / `run uninstall <name>` —
   Run or manage `.hx` apps
 
@@ -187,13 +188,16 @@ servo read <pin>
 servo list
 ```
 
-- Sensors (named registry: ultrasonic, DHT22, DS18B20 daisy-chain, BME280):
+- Sensors (named registry: ultrasonic, DHT22, DS18B20 daisy-chain, BME280, soil, ldr, BH1750):
 
 ```
 sensor register ultrasonic <trigger> <echo> <name>
 sensor register dht22 <pin> <name>
 sensor register ds18b20 <pin> [index] <name>
 sensor register bme280 <name>
+sensor register soil A0 <name>
+sensor register ldr A0 <name>
+sensor register bh1750 <name>
 sensor unregister <name>
 sensor list
 sensor read <name>
@@ -201,10 +205,14 @@ sensor publish [name]
 ```
 
   - Names are 1-15 chars `[A-Za-z0-9_-]`; pins are GPIO numbers validated via
-    `GpioAPI::isAvailablePin`. Registered sensors persist to `/sensors.conf`
+    `GpioAPI::isAvailablePin`. soil/ldr are raw ADC readings on the single
+    ESP8266 analog input and accept only the `A0` (or `17`) pin token, reported
+    as a 0-100 percent; bh1750 is an I2C lux sensor (address 0x23) needing no
+    pin. Registered sensors persist to `/sensors.conf`
     (bad lines are skipped with a warning at boot) and their readings publish
     retained to `<mqtt_prefix>/sensor/<name>/<quantity>` (`distance`,
-    `temperature`, `humidity`, `pressure`). See `Documentation/ha-mqtt.md`.
+    `temperature`, `humidity`, `pressure`, `moisture`, `illuminance`). See
+    `Documentation/ha-mqtt.md`.
   - `sensor publish` reads every sensor now and publishes the cached readings
     — the cron-friendly cadence:
     `schedule add 0 */5 * * * * sensor publish`
@@ -223,6 +231,15 @@ motor brake [m1|m2]
 motor speed <0-100> [m1|m2]
 motor list
 ```
+
+- Buzzer beep:
+
+```
+beep <pin> [hz] [ms]
+```
+
+Blocks for `<ms>` (default 1000Hz, 200ms; max 10s). Rejects pins attached
+to a servo or motor.
 
 Examples
 - Create and edit a file:

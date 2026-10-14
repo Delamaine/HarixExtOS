@@ -23,6 +23,10 @@ public:
   
   // Pulse GPIO (on-off repetition)
   static ApiResult pulse(uint8_t pin, int count, int delayMs = 250);
+
+  // Shared `beep <pin> [hz] [ms]` body used by the shell and the script
+  // engine. Blocking tone() + noTone(); rejects pins in use by servo/motor.
+  static ApiResult beep(const String &args, Stream &out);
   
   // Get all available pins for this board
   static void listAvailablePins(Stream &output);

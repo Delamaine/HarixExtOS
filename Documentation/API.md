@@ -72,6 +72,9 @@ GpioAPI::setMode(4, INPUT_PULLUP);
 
 // Pulse GPIO
 GpioAPI::pulse(2, 5, 250);  // 5 pulses, 250ms each
+
+// Buzzer beep (blocking, rejects pins used by servo/motor)
+ApiResult beep = GpioAPI::beep("4 1000 200", Serial);  // pin hz ms
 ```
 
 ### Available Pins

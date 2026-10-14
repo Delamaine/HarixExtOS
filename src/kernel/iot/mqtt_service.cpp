@@ -296,17 +296,25 @@ void publishHADiscovery() {
 
   publishRaw(switchConfigTopic, switchPayload, true);
 
-  // Binary sensor configs: one per active onchange pin.
+  // Binary sensor configs: one per active onchange rule ("pin class" entries).
   String pins = harixos::iot::collectActiveRulePins();
   size_t start = 0;
   while (start < pins.length()) {
     size_t comma = pins.indexOf(',', start);
-    String pin = (comma == (size_t)-1) ? pins.substring(start) : pins.substring(start, comma);
-    pin.trim();
-    if (pin.length() == 0) {
+    String entry = (comma == (size_t)-1) ? pins.substring(start) : pins.substring(start, comma);
+    entry.trim();
+    if (entry.length() == 0) {
       if (comma == (size_t)-1) break;
       start = comma + 1;
       continue;
+    }
+    String pin = entry, deviceClass = F("motion");
+    size_t space = entry.indexOf(' ');
+    if (space != (size_t)-1) {
+      pin = entry.substring(0, space);
+      deviceClass = entry.substring(space + 1);
+      deviceClass.trim();
+      if (deviceClass.length() == 0) deviceClass = F("motion");
     }
     String bsTopic = "homeassistant/binary_sensor/";
     bsTopic += hp;
@@ -324,7 +332,9 @@ void publishHADiscovery() {
     bsPayload += F("/gpio/");
     bsPayload += pin;
     bsPayload += F("\"");
-    bsPayload += F(",\"device_class\":\"motion\"");
+    bsPayload += F(",\"device_class\":\"");
+    bsPayload += deviceClass;
+    bsPayload += F("\"");
     bsPayload += F(",\"uniq_id\":\"");
     bsPayload += hp;
     bsPayload += F("_gpio_");

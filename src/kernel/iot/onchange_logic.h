@@ -5,6 +5,9 @@
 
 namespace harixos { namespace iot {
 enum class EdgeMode : uint8_t { Rising, Falling, Both };
+enum class BinaryClass : uint8_t { Motion, Occupancy, Door, Window, Moisture };
+bool parseBinaryClass(const char *s, BinaryClass &out);
+const char *binaryClassToken(BinaryClass cls);
 struct DebounceState {
   bool initialized;
   bool previousRaw;

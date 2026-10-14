@@ -43,6 +43,7 @@
 #include "api/servo.h"
 #include "api/motor.h"
 #include "api/pins.h"
+#include "api/gpio_api.h"
 #include "api/pwm.h"
 #include "api/vcc.h"
 
@@ -1912,7 +1913,7 @@ void handleSchedule(const String &line) {
 // kHelpTopics, or `help <topic>` advertises a dead topic. If this list ever
 // drifts, convert handleHelp's if/else chain to a table keyed on kHelpTopics.
 static const char* const kHelpTopics =
-    "wifi|gpio|i2c|fs|serve|post|mqtt|onchange|relay|time|schedule|update|sensor|servo|motor|run|calc|set|vars|settings|powerprofile|cpufreq";
+    "wifi|gpio|i2c|fs|serve|post|mqtt|onchange|relay|time|schedule|update|sensor|servo|motor|beep|run|calc|set|vars|settings|powerprofile|cpufreq";
 
 void handleHelp(const TokenizedLine &cmd) {
   if (cmd.count == 1) {
@@ -1965,6 +1966,7 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  sensor ...           Sensors: register/list/read/publish (HC-SR04, DHT22, DS18B20, BME280); legacy init/ping/read/list"));
     Serial.println(F("  servo ...            SG90 servo motor (servo attach|detach|write|read|list)"));
     Serial.println(F("  motor ...            L293D motor shield (motor init|forward|reverse|stop|brake|speed|list)"));
+    Serial.println(F("  beep <pin> [hz] [ms] Buzzer beep (tone; default 1000Hz 200ms)"));
     Serial.println(F("  relay ...            Relay/latched switch (relay add <pin> <name> [on|off] | set <name> on|off | toggle <name> | status <name> | list)"));
     Serial.println(F("  run ...              Install/list/run/uninstall .hx apps (run install|list|run|uninstall)"));
     Serial.println(F("  calc <expr>          Evaluate arithmetic expressions"));
@@ -2060,11 +2062,14 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("Example:"));
     Serial.println(F("  update check"));
   } else if (topic == F("sensor")) {
-    Serial.println(F("Sensor registry (HC-SR04 ultrasonic, DHT22, DS18B20 daisy-chain, BME280):"));
+    Serial.println(F("Sensor registry (HC-SR04 ultrasonic, DHT22, DS18B20 daisy-chain, BME280, soil, ldr, BH1750):"));
     Serial.println(F("  sensor register ultrasonic <trigger> <echo> <name>"));
     Serial.println(F("  sensor register dht22 <pin> <name>"));
     Serial.println(F("  sensor register ds18b20 <pin> [index] <name>"));
     Serial.println(F("  sensor register bme280 <name>"));
+    Serial.println(F("  sensor register soil A0 <name>          Capacitive soil moisture (%, ADC)"));
+    Serial.println(F("  sensor register ldr A0 <name>           Photoresistor divider (%, ADC)"));
+    Serial.println(F("  sensor register bh1750 <name>           BH1750 digital lux sensor (lx, I2C 0x23)"));
     Serial.println(F("  sensor unregister <name>          Remove and persist"));
     Serial.println(F("  sensor list                       List registered sensors + cached values"));
     Serial.println(F("  sensor read <name>                Read now and print all quantities"));
@@ -2111,9 +2116,13 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println();
     Serial.println(F("Controls 2 DC motors via PWM + GPIO direction pins."));
     Serial.println(F("Speed: 0-100% PWM duty cycle. Direction: forward/reverse."));
+  } else if (topic == F("beep")) {
+    Serial.println(F("Beep command (buzzer tone):"));
+    Serial.println(F("  beep <pin> [hz] [ms]   Beep a buzzer (defaults 1000Hz, 200ms)"));
+    Serial.println(F("      Blocks for <ms> (max 10s). Rejects pins attached to a servo or motor."));
   } else if (topic == F("onchange")) {
     Serial.println(F("Onchange commands (GPIO edge detection):"));
-    Serial.println(F("  onchange add <pin> <rising|falling|both>  Register edge handler"));
+    Serial.println(F("  onchange add <pin> <rising|falling|both> [class]  Register edge handler"));
     Serial.println(F("  onchange remove <pin>  Remove onchange rule"));
     Serial.println(F("  onchange list          List all onchange rules"));
     Serial.println(F("      Pins accept 'D5' or '5'. Rules persist across reboots."));
@@ -2134,6 +2143,7 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  vars save              Write variables to flash"));
     Serial.println(F("  vars load              Reload variables from flash"));
     Serial.println(F("  vars clear             Delete all variables"));
+    Serial.println(F("  Limits: 16 variables, names max 16 chars, string values max 31 chars."));
   } else if (topic == F("post")) {
     Serial.println(F("HTTP webhook POST:"));
     Serial.println(F("  post <url> <body> [content-type]"));
@@ -2285,6 +2295,14 @@ void executeCommand(const String &line) {
   } else if (command == F("motor")) {
     String tail = line.substring(5);
     handleMotor(tail);
+  } else if (command == F("beep")) {
+    String tail = line.substring(4);
+    tail.trim();
+    harixos::api::ApiResult result = harixos::api::GpioAPI::beep(tail, Serial);
+    if (result.isError()) {
+      Serial.print(F("ERROR: "));
+    }
+    Serial.println(result.message);
   } else if (command == F("vars")) {
     handleVars(line.substring(5));
   } else {

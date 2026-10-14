@@ -17,6 +17,9 @@ enum SensorType : uint8_t {
   kSensorDht22,
   kSensorDs18b20,
   kSensorBme280,
+  kSensorSoil,
+  kSensorLdr,
+  kSensorBh1750,
   kSensorTypeCount
 };
 
@@ -25,6 +28,8 @@ enum SensorQty : uint8_t {
   kQtyTemperature,
   kQtyHumidity,
   kQtyPressure,
+  kQtyMoisture,
+  kQtyIlluminance,
   kSensorQtyCount
 };
 
@@ -33,6 +38,8 @@ enum SensorQty : uint8_t {
 //   dht22:      a = data pin
 //   ds18b20:    a = data pin, b = device index on the 1-Wire bus (daisy-chain)
 //   bme280:     no pins (I2C address probed at read time)
+//   soil/ldr:   a = 17 (A0, the only analog-capable pin)
+//   bh1750:     no pins (I2C 0x23)
 struct SensorDef {
   char name[16];  // NUL-terminated, 1-15 chars [A-Za-z0-9_-]
   uint8_t type;   // SensorType value
@@ -42,6 +49,8 @@ struct SensorDef {
   float humidity;
   float pressure;
   float distance;
+  float moisture;     // %
+  float illuminance;  // % (ldr) or lx (bh1750)
 };
 
 // Names land in MQTT topics and HA discovery ids; reuse the relay rule.
@@ -65,13 +74,16 @@ void sensorSetReading(SensorDef& d, uint8_t qty, float v);
 // Whether `type` produces quantity `qty`.
 bool sensorHasQuantity(uint8_t type, uint8_t qty);
 
-// "distance" | "temperature" | "humidity" | "pressure"; "" for invalid.
+// "distance" | "temperature" | "humidity" | "pressure" | "moisture" |
+// "illuminance"; "" for invalid.
 const char* sensorQtyName(uint8_t qty);
 
-// "cm" | "°C" | "%" | "hPa"; "" for invalid.
+// "cm" | "°C" | "%" | "hPa" | "lx"; "" for invalid.
 const char* sensorUnit(uint8_t type, uint8_t qty);
 
-// HA device_class: "distance" | "temperature" | "humidity" | "pressure".
+// HA device_class: "distance" | "temperature" | "humidity" | "pressure" |
+// "moisture" | "illuminance"; "" when no class fits (ldr's % is not a valid
+// illuminance unit in HA, so ldr gets none).
 const char* sensorDeviceClass(uint8_t type, uint8_t qty);
 
 // Format a reading payload as "%.1f".

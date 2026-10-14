@@ -13,7 +13,7 @@ namespace api {
 namespace expr {
 namespace {
 
-constexpr size_t kMaxToks = 128;
+constexpr size_t kMaxToks = 64;
 constexpr size_t kMaxNumberChars = 31;
 
 // Moved from stack to static storage: 1,152 B of locals would otherwise

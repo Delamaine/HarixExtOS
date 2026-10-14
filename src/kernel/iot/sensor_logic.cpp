@@ -30,7 +30,7 @@ bool sensorValidName(const char* s) {
 
 bool sensorParseType(const char* s, uint8_t* out) {
   static const char* kNames[kSensorTypeCount] = {
-      "ultrasonic", "dht22", "ds18b20", "bme280"};
+      "ultrasonic", "dht22", "ds18b20", "bme280", "soil", "ldr", "bh1750"};
   for (uint8_t i = 0; i < kSensorTypeCount; ++i) {
     if (strcmp(s, kNames[i]) == 0) {
       *out = i;
@@ -42,7 +42,7 @@ bool sensorParseType(const char* s, uint8_t* out) {
 
 const char* sensorTypeName(uint8_t type) {
   static const char* kNames[kSensorTypeCount] = {
-      "ultrasonic", "dht22", "ds18b20", "bme280"};
+      "ultrasonic", "dht22", "ds18b20", "bme280", "soil", "ldr", "bh1750"};
   return type < kSensorTypeCount ? kNames[type] : "";
 }
 
@@ -67,6 +67,8 @@ void sensorSetReading(SensorDef& d, uint8_t qty, float v) {
     case kQtyTemperature:  d.temperature = v; break;
     case kQtyHumidity:     d.humidity = v; break;
     case kQtyPressure:     d.pressure = v; break;
+    case kQtyMoisture:     d.moisture = v; break;
+    case kQtyIlluminance:  d.illuminance = v; break;
     default: break;
   }
 }
@@ -78,34 +80,40 @@ bool sensorHasQuantity(uint8_t type, uint8_t qty) {
     case kSensorDs18b20:    return qty == kQtyTemperature;
     case kSensorBme280:
       return qty == kQtyTemperature || qty == kQtyHumidity || qty == kQtyPressure;
+    case kSensorSoil:     return qty == kQtyMoisture;
+    case kSensorLdr:      return qty == kQtyIlluminance;
+    case kSensorBh1750:   return qty == kQtyIlluminance;
     default: return false;
   }
 }
 
 const char* sensorQtyName(uint8_t qty) {
   static const char* kNames[kSensorQtyCount] = {
-      "distance", "temperature", "humidity", "pressure"};
+      "distance", "temperature", "humidity", "pressure", "moisture", "illuminance"};
   return qty < kSensorQtyCount ? kNames[qty] : "";
 }
 
 const char* sensorUnit(uint8_t type, uint8_t qty) {
-  (void)type;
   switch (qty) {
     case kQtyDistance:     return "cm";
     case kQtyTemperature:  return "\xC2\xB0" "C";
     case kQtyHumidity:     return "%";
     case kQtyPressure:     return "hPa";
+    case kQtyMoisture:     return "%";
+    case kQtyIlluminance:  return type == kSensorBh1750 ? "lx" : "%";
     default: return "";
   }
 }
 
 const char* sensorDeviceClass(uint8_t type, uint8_t qty) {
-  (void)type;
   switch (qty) {
     case kQtyDistance:     return "distance";
     case kQtyTemperature:  return "temperature";
     case kQtyHumidity:     return "humidity";
     case kQtyPressure:     return "pressure";
+    case kQtyMoisture:     return "moisture";
+    // HA only accepts lx for illuminance; ldr reports %, so it gets no class.
+    case kQtyIlluminance:  return type == kSensorBh1750 ? "illuminance" : "";
     default: return "";
   }
 }
@@ -155,10 +163,14 @@ bool sensorParseLine(const char* line, SensorDef* out) {
   if (!parseU8(f3, &a) || !parseU8(f4, &b)) return false;
 
   // Pin rules mirror registerSensor: pinned types need a nonzero GPIO (0 =
-  // unset), ultrasonic needs a real echo pin, bme280 takes no pins at all.
+  // unset), ultrasonic needs a real echo pin, bme280/bh1750 take no pins at
+  // all, soil/ldr use A0 (17) only.
   switch (type) {
-    case kSensorBme280: if (a != 0 || b != 0) return false; break;
+    case kSensorBme280:
+    case kSensorBh1750: if (a != 0 || b != 0) return false; break;
     case kSensorUltrasonic: if (a == 0 || b == 0) return false; break;
+    case kSensorSoil:
+    case kSensorLdr: if (a != 17) return false; break;
     default: if (a == 0) return false; break;  // dht22 / ds18b20 (b ignored)
   }
 
@@ -171,19 +183,30 @@ bool sensorParseLine(const char* line, SensorDef* out) {
   out->humidity = NAN;
   out->pressure = NAN;
   out->distance = NAN;
+  out->moisture = NAN;
+  out->illuminance = NAN;
   return true;
 }
 
 bool sensorDiscoveryPayload(const char* hp, const char* prefix,
                             const char* name, uint8_t type, uint8_t qty,
                             char* out, size_t max) {
+  // HA rejects "device_class":"" outright; omit the field when there is no
+  // class (ldr).
+  const char* dc = sensorDeviceClass(type, qty);
+  char dcField[48];
+  if (dc[0]) {
+    snprintf(dcField, sizeof(dcField), ",\"device_class\":\"%s\"", dc);
+  } else {
+    dcField[0] = '\0';
+  }
   int n = snprintf(
       out, max,
       "{\"name\":\"%s_%s_%s\",\"state_topic\":\"%s/sensor/%s/%s\","
-      "\"unit_of_measurement\":\"%s\",\"device_class\":\"%s\","
+      "\"unit_of_measurement\":\"%s\"%s,"
       "\"uniq_id\":\"%s_sensor_%s_%s\",\"dev\":{\"ids\":\"%s\"}}",
       hp, name, sensorQtyName(qty), prefix, name, sensorQtyName(qty),
-      sensorUnit(type, qty), sensorDeviceClass(type, qty),
+      sensorUnit(type, qty), dcField,
       hp, name, sensorQtyName(qty), hp);
   return n >= 0 && (size_t)n < max;
 }
