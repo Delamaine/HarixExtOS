@@ -9,6 +9,7 @@
 #include "../../api/system_api.h"
 #include "../../api/servo.h"
 #include "../../api/motor.h"
+#include "../../api/vcc.h"
 #include "../../kernel/iot/onchange.h"
 #include "../../kernel/iot/relay.h"
 #include "../../utils/string_stream.h"
@@ -202,6 +203,7 @@ void begin() {
 
 // Build telemetry JSON payload manually (no JSON library).
 // Payload: {"heap","uptime","rssi","adc","vcc","servo","m1","m2"}
+// ("vcc" omitted when the boot-captured VCC is unavailable)
 String buildTelemetryPayload() {
   String payload = String();
   payload += F("{\"heap\":");
@@ -212,8 +214,11 @@ String buildTelemetryPayload() {
   payload += String((int)WiFi.RSSI());
   payload += F(",\"adc\":");
   payload += String(analogRead(A0));
-  payload += F(",\"vcc\":");
-  payload += String(ESP.getVcc());
+  harixos::api::vcc::capture();
+  if (const uint16_t vccMv = harixos::api::vcc::cached()) {
+    payload += F(",\"vcc\":");
+    payload += String(vccMv);
+  }
   ServoAPI* servo = ServoAPI::firstAttached();
   payload += F(",\"servo\":");
   payload += servo ? String(servo->readAngle()) : String(-1);

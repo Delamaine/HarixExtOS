@@ -172,7 +172,7 @@ Telemetry payload (published every `mqtt_interval` seconds):
 | `uptime` | Seconds since boot |
 | `rssi` | WiFi signal strength (dBm) |
 | `adc` | Analog read of A0 (0–1023) |
-| `vcc` | Supply voltage in mV (`ESP.getVcc()`, 3.3 V boards) |
+| `vcc` | Supply voltage in mV, captured once at boot before the first A0 read; omitted when unavailable (the ESP8266 ADC can measure VCC or A0, never both) |
 | `servo` | First attached servo angle, -1 if none |
 | `m1` / `m2` | Motor 1/2 speed, -1 if not initialized |
 

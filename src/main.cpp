@@ -44,6 +44,7 @@
 #include "api/motor.h"
 #include "api/pins.h"
 #include "api/pwm.h"
+#include "api/vcc.h"
 
 // shellSettings now lives in the settings module so wifi_api.cpp can reach it;
 // main.cpp uses it unqualified ~29 times, so import just that one name rather
@@ -259,7 +260,12 @@ void printSystemInfo() {
   Serial.printf("  Reset reason: %s\r\n", resetReasonToString().c_str());
   Serial.printf("  Uptime: %s\r\n", uptimeToHuman(millis()).c_str());
   Serial.printf("  Heap free: %u bytes\r\n", ESP.getFreeHeap());
-  Serial.printf("  VCC: %u mV\r\n", ESP.getVcc());
+  harixos::api::vcc::capture();
+  if (const uint16_t vccMv = harixos::api::vcc::cached()) {
+    Serial.printf("  VCC: %u mV (measured at boot)\r\n", vccMv);
+  } else {
+    Serial.println(F("  VCC: n/a (ADC switched to A0 mode)"));
+  }
   Serial.printf("  Sketch used: %s\r\n", bytesToHuman(ESP.getSketchSize()).c_str());
   Serial.printf("  Free sketch space: %s\r\n", bytesToHuman(ESP.getFreeSketchSpace()).c_str());
   Serial.printf("  Flash size: %s\r\n", bytesToHuman(ESP.getFlashChipRealSize()).c_str());
@@ -2516,7 +2522,9 @@ RF_PRE_INIT() {
 }
 
 void setup() {
-  
+  // Capture VCC before anything reads A0 (shared ADC, see api/vcc.h)
+  harixos::api::vcc::capture();
+
   Serial.begin(115200);
   Serial.setTimeout(25);
   delay(500);
