@@ -4,7 +4,7 @@ HarixOS Shell Commands
 Core shell commands
 - `help [topic]` — Show help and command list (`help wifi|gpio|i2c|fs|serve|post|mqtt|onchange|relay|time|schedule|update|sensor|servo|motor|run|calc|set|vars|settings|powerprofile|cpufreq`)
 - `about` — Show version and feature list
-- `info` — Show system, WiFi, GPIO, filesystem, last reset and (if synced) current time
+- `info` — Show system (incl. supply voltage VCC in mV), WiFi, GPIO, filesystem, last reset and (if synced) current time
 - `chip` — Show chip and flash details
 - `heap` — Show free heap
 - `uptime` — Show runtime

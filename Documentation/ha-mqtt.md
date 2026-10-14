@@ -163,7 +163,7 @@ homeassistant/sensor/harixos_a590a8/telemetry/config:
 Telemetry payload (published every `mqtt_interval` seconds):
 
 ```json
-{"heap":47120,"uptime":3600,"rssi":-52,"adc":512}
+{"heap":47120,"uptime":3600,"rssi":-52,"adc":512,"vcc":3100,"servo":90,"m1":-1,"m2":-1}
 ```
 
 | Field | Description |
@@ -172,6 +172,9 @@ Telemetry payload (published every `mqtt_interval` seconds):
 | `uptime` | Seconds since boot |
 | `rssi` | WiFi signal strength (dBm) |
 | `adc` | Analog read of A0 (0–1023) |
+| `vcc` | Supply voltage in mV (`ESP.getVcc()`, 3.3 V boards) |
+| `servo` | First attached servo angle, -1 if none |
+| `m1` / `m2` | Motor 1/2 speed, -1 if not initialized |
 
 Telemetry is skipped (and `telemetry-drop` incremented) when free heap is
 below 8 KB, when a blocking script owns the CPU (one tick catches up after

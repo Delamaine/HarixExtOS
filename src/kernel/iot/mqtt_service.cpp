@@ -201,7 +201,7 @@ void begin() {
 }
 
 // Build telemetry JSON payload manually (no JSON library).
-// Payload: {"heap":<u>,"uptime":<u>,"rssi":<i>,"adc":<u>}
+// Payload: {"heap","uptime","rssi","adc","vcc","servo","m1","m2"}
 String buildTelemetryPayload() {
   String payload = String();
   payload += F("{\"heap\":");
@@ -212,6 +212,8 @@ String buildTelemetryPayload() {
   payload += String((int)WiFi.RSSI());
   payload += F(",\"adc\":");
   payload += String(analogRead(A0));
+  payload += F(",\"vcc\":");
+  payload += String(ESP.getVcc());
   ServoAPI* servo = ServoAPI::firstAttached();
   payload += F(",\"servo\":");
   payload += servo ? String(servo->readAngle()) : String(-1);

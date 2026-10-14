@@ -81,17 +81,17 @@ void applyPowerProfile(PowerProfile profile) {
       break;
       
     case PowerProfile::Powersave:
-      // WiFi on, light sleep, 80MHz
+      // Modem sleep (same as Balanced; CPU freq set separately via cpufreq cmd)
       wifi_set_sleep_type(MODEM_SLEEP_T);
       break;
       
     case PowerProfile::Minimal:
-      // WiFi on, deep sleep with timer wake, 40MHz
+      // Modem sleep (CPU freq lowering to 40MHz is done by the caller)
       wifi_set_sleep_type(MODEM_SLEEP_T);
       break;
       
     case PowerProfile::Off:
-      // WiFi off, deep sleep
+      // No modem sleep (WiFi state unchanged here)
       wifi_set_sleep_type(NONE_SLEEP_T);
       break;
   }

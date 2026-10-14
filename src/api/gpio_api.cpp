@@ -1,14 +1,12 @@
 #include "gpio_api.h"
 
+#include "pins.h"
+
 namespace harixos {
 namespace api {
 
 bool GpioAPI::isAvailablePin(uint8_t pin) {
-  // GPIO6-11 are flash memory, GPIO1/3 are UART
-  if (pin > 16) return false;
-  if (pin >= 6 && pin <= 11) return false;
-  if (pin == 1 || pin == 3) return false;
-  return true;
+  return pins::isAvailable(pin);
 }
 
 bool GpioAPI::isBootStrapPin(uint8_t pin) {

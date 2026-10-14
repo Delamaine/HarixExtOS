@@ -17,10 +17,6 @@ public:
   static const uint8_t kMinSpeed = 0;
   static const uint8_t kMaxSpeed = 100;
 
-  // PWM settings
-  static const int kPwmFrequency = 5000;  // 5kHz for DC motors
-  static const int kPwmResolution = 8;    // 8-bit resolution
-
   // Direction states
   enum Direction {
     FORWARD = 0,
@@ -95,7 +91,6 @@ private:
   // Static pool of motor instances
   static MotorAPI pool_[kMaxMotors];
   static bool inited_[kMaxMotors];
-  static bool pwmConfigSet_;
 
   // Calculate PWM duty cycle from speed percentage
   uint8_t speedToDuty(uint8_t speed) const;

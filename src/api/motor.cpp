@@ -1,13 +1,14 @@
 #include "motor.h"
 #include <Arduino.h>
 
+#include "pins.h"
+
 namespace harixos {
 namespace api {
 
 // Static pool initialization
 MotorAPI MotorAPI::pool_[MotorAPI::kMaxMotors];
 bool MotorAPI::inited_[MotorAPI::kMaxMotors] = {false};
-bool MotorAPI::pwmConfigSet_ = false;
 
 MotorAPI::MotorAPI() : initialized_(false) {
   config_.index = 0;
@@ -31,13 +32,6 @@ int MotorAPI::init(uint8_t index, uint8_t namePin, uint8_t speedPin) {
       pool_[i].config_.lastDir = STOPPED;
       pool_[i].initialized_ = true;
       inited_[i] = true;
-
-      // Configure PWM once
-      if (!pwmConfigSet_) {
-        analogWriteFreq(kPwmFrequency);
-        analogWriteResolution(kPwmResolution);
-        pwmConfigSet_ = true;
-      }
 
       // Set pins
       pinMode(namePin, OUTPUT);
@@ -244,6 +238,10 @@ ApiResult MotorAPI::runCommand(const String &args, Stream &out) {
       namePin = tail.toInt();
       sep = tail.indexOf(' ');
       speedPin = (sep >= 0) ? tail.substring(sep + 1).toInt() : 12;
+      if (!pins::isAvailable(namePin) || !pins::isAvailable(speedPin)) {
+        return ApiResult(API_INVALID_PIN,
+                         "Motor pins must be usable ESP8266 GPIOs.");
+      }
     }
 
     uint8_t index = (motorName == F("m1") || motorName == F("0")) ? 0 : 1;

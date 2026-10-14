@@ -233,7 +233,7 @@ MotorAPI::listAll(Serial);
 ### Motor Configuration
 - **M1**: namePin=GPIO14(D5), speedPin=GPIO12(D6)
 - **M2**: namePin=GPIO13(D7), speedPin=GPIO5(D1)
-- PWM: 5kHz, 8-bit resolution
+- PWM: 50Hz, 8-bit resolution (global `analogWriteFreq(50)` set once at boot, shared with servos)
 - Speed range: 0-100% (PWM duty cycle 0-255)
 - Max 2 motors supported
 

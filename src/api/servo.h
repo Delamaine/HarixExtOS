@@ -17,9 +17,6 @@ public:
   static const uint8_t kMinAngle = 0;
   static const uint8_t kMaxAngle = 180;
 
-  // PWM settings for SG90 (50Hz)
-  static const int kPwmFrequency = 50;       // Hz
-  static const int kPwmResolution = 8;       // bits
   // Duty cycle range for SG90 (typical values)
   // 0.5ms pulse = 0 degrees, 2.5ms pulse = 180 degrees
   // At 50Hz, period = 20ms, duty = pulse/period * 1024 (10-bit)
@@ -86,7 +83,6 @@ private:
   // Static pool of servo instances
   static ServoAPI pool_[kMaxServos];
   static bool inited_[kMaxServos];
-  static bool pwmFreqSet_;
 
   // Calculate duty cycle for angle
   uint8_t angleToDuty(uint8_t angle);

@@ -1,13 +1,14 @@
 #include "servo.h"
 #include <Arduino.h>
 
+#include "pins.h"
+
 namespace harixos {
 namespace api {
 
 // Static pool initialization
 ServoAPI ServoAPI::pool_[ServoAPI::kMaxServos];
 bool ServoAPI::inited_[ServoAPI::kMaxServos] = {false};
-bool ServoAPI::pwmFreqSet_ = false;
 
 ServoAPI::ServoAPI() : attached_(false), lastAngle_(90) {
   config_.pin = 0;
@@ -28,13 +29,6 @@ int ServoAPI::attach(uint8_t pin) {
       pool_[i].attached_ = true;
       pool_[i].lastAngle_ = 90;
       inited_[i] = true;
-
-      // Set PWM frequency once
-      if (!pwmFreqSet_) {
-        analogWriteFreq(kPwmFrequency);
-        analogWriteResolution(kPwmResolution);
-        pwmFreqSet_ = true;
-      }
 
       // Set initial duty to 0
       analogWrite(pin, 0);
@@ -152,6 +146,10 @@ ApiResult ServoAPI::runCommand(const String &args, Stream &out) {
       return ApiResult(API_INVALID_ARGUMENT, "Usage: servo attach <pin>");
     }
     uint8_t pin = tail.toInt();
+    if (!pins::isAvailable(pin)) {
+      return ApiResult(API_INVALID_PIN,
+                       "GPIO" + String(pin) + " is reserved or invalid");
+    }
     int result = attach(pin);
     if (result < 0) {
       return ApiResult(API_ERROR, "Servo pool full.");
@@ -180,6 +178,10 @@ ApiResult ServoAPI::runCommand(const String &args, Stream &out) {
     uint8_t pin = (sep2 < 0) ? tail.toInt() : tail.substring(0, sep2).toInt();
     uint8_t angle = (sep2 < 0) ? 90 : tail.substring(sep2 + 1).toInt();
     if (angle > 180) angle = 180;
+    if (!pins::isAvailable(pin)) {
+      return ApiResult(API_INVALID_PIN,
+                       "GPIO" + String(pin) + " is reserved or invalid");
+    }
 
     ServoAPI *servo = findByPin(pin);
     if (!servo && attach(pin) >= 0) {

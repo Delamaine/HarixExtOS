@@ -42,6 +42,8 @@
 #include "api/sensor.h"
 #include "api/servo.h"
 #include "api/motor.h"
+#include "api/pins.h"
+#include "api/pwm.h"
 
 // shellSettings now lives in the settings module so wifi_api.cpp can reach it;
 // main.cpp uses it unqualified ~29 times, so import just that one name rather
@@ -169,17 +171,7 @@ String resetReasonToString() {
 }
 
 bool isAvailableGpio(uint8_t pin) {
-  // ESP8266 GPIO6-11 are connected to flash; GPIO1/3 are UART TX/RX.
-  if (pin > 16) {
-    return false;
-  }
-  if (pin >= 6 && pin <= 11) {
-    return false;
-  }
-  if (pin == 1 || pin == 3) {
-    return false;
-  }
-  return true;
+  return harixos::api::pins::isAvailable(pin);
 }
 
 bool isBootStrapPin(uint8_t pin) {
@@ -267,6 +259,7 @@ void printSystemInfo() {
   Serial.printf("  Reset reason: %s\r\n", resetReasonToString().c_str());
   Serial.printf("  Uptime: %s\r\n", uptimeToHuman(millis()).c_str());
   Serial.printf("  Heap free: %u bytes\r\n", ESP.getFreeHeap());
+  Serial.printf("  VCC: %u mV\r\n", ESP.getVcc());
   Serial.printf("  Sketch used: %s\r\n", bytesToHuman(ESP.getSketchSize()).c_str());
   Serial.printf("  Free sketch space: %s\r\n", bytesToHuman(ESP.getFreeSketchSpace()).c_str());
   Serial.printf("  Flash size: %s\r\n", bytesToHuman(ESP.getFlashChipRealSize()).c_str());
@@ -2534,6 +2527,9 @@ void setup() {
   Serial.println(F("***********************************"));
   Serial.flush();
   delay(100);
+
+  // One global PWM config (50 Hz, 8-bit) for all analogWrite pins (servo/motor)
+  harixos::api::configureGlobalPwm();
 
   // Disable automatic WiFi during boot to prevent crash loops
   WiFi.mode(WIFI_OFF);
