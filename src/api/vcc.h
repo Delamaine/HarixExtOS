@@ -6,10 +6,11 @@ namespace harixos {
 namespace api {
 namespace vcc {
 
-// ponytail: one-shot boot capture. The ESP8266 has a single ADC: the first
-// analogRead(A0) (adc command, telemetry) switches it out of VCC mode and
-// ESP.getVcc() returns 0xFFFF forever after. Capture before any A0 read;
-// 0 means "unavailable".
+// ponytail: cached sentinel check. The ESP8266 has a single ADC and the core
+// defaults to TOUT mode (vdd33_const=33), so ESP.getVcc() returns 0xFFFF
+// unless the firmware is compiled with ADC_MODE(ADC_VCC) — which breaks
+// analogRead(A0). With A0 in use (default), this is always "unavailable";
+// the call still works if someone builds with ADC_MODE(ADC_VCC).
 inline uint16_t& cached() {
   static uint16_t value = 0;
   return value;

@@ -264,7 +264,7 @@ void printSystemInfo() {
   if (const uint16_t vccMv = harixos::api::vcc::cached()) {
     Serial.printf("  VCC: %u mV (measured at boot)\r\n", vccMv);
   } else {
-    Serial.println(F("  VCC: n/a (ADC switched to A0 mode)"));
+    Serial.println(F("  VCC: n/a (ADC is measuring A0; needs ADC_MODE(ADC_VCC) build)"));
   }
   Serial.printf("  Sketch used: %s\r\n", bytesToHuman(ESP.getSketchSize()).c_str());
   Serial.printf("  Free sketch space: %s\r\n", bytesToHuman(ESP.getFreeSketchSpace()).c_str());

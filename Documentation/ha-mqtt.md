@@ -163,7 +163,7 @@ homeassistant/sensor/harixos_a590a8/telemetry/config:
 Telemetry payload (published every `mqtt_interval` seconds):
 
 ```json
-{"heap":47120,"uptime":3600,"rssi":-52,"adc":512,"vcc":3100,"servo":90,"m1":-1,"m2":-1}
+{"heap":47120,"uptime":3600,"rssi":-52,"adc":512,"servo":90,"m1":-1,"m2":-1}
 ```
 
 | Field | Description |
@@ -172,7 +172,7 @@ Telemetry payload (published every `mqtt_interval` seconds):
 | `uptime` | Seconds since boot |
 | `rssi` | WiFi signal strength (dBm) |
 | `adc` | Analog read of A0 (0–1023) |
-| `vcc` | Supply voltage in mV, captured once at boot before the first A0 read; omitted when unavailable (the ESP8266 ADC can measure VCC or A0, never both) |
+| `vcc` | Supply voltage in mV; only present when the firmware is built with `ADC_MODE(ADC_VCC)`. Default builds use the ADC for A0, so the field is omitted (the ESP8266 can measure VCC or A0, never both) |
 | `servo` | First attached servo angle, -1 if none |
 | `m1` / `m2` | Motor 1/2 speed, -1 if not initialized |
 
