@@ -18,13 +18,14 @@ GND ────[ relay module IN ]───────────────
 wifi connect 'SSID' 'pass'
 mqtt settings <broker> 1883
 mqtt start
-onchange add 4 both
 relay add 5 mirror
-vars set force=2
-vars save
 notepad /scripts/pin-mirror.hx        # paste the contents of pin-mirror.hx, save
-schedule add * * * * * * run /scripts/pin-mirror.hx
+run /scripts/pin-mirror.hx            # run once: init registers the onchange rule, the 1 s schedule, force=2
 ```
+
+The script is self-contained: its `init` block does `onchange add`, `schedule add` and
+`vars setdefault force=2` once per boot (all idempotent). After a reboot the persisted
+schedule re-fires and re-runs init itself.
 
 `<prefix>` is your `mqtt_prefix` setting (default `harixos/<chipid>`).
 
@@ -54,8 +55,8 @@ mosquitto_sub -t '<prefix>/gpio/4' -t '<prefix>/relay/mirror/state'
 
 ## Notes
 
-- Send `vars save` after `vars set`: the script's `vars load` at the top of each run
-  restores values from the saved file, which is also what survives a reboot.
+- Send `vars save` after `vars set`: the vars store auto-loads at boot, so the saved
+  `force` survives reboots and the script's `vars setdefault` leaves it untouched.
 - The check runs every second (cron `*` in the seconds field); commands take effect at
   the next tick. The script exits immediately so the device stays responsive — see the
   doorbell-remote README for why `while 1` scripts are a bad fit.

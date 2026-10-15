@@ -20,12 +20,13 @@ mqtt settings <broker> 1883
 mqtt start
 sensor register soil A0 moisture
 relay add 5 pump
-vars set target=600
-vars save
 notepad /scripts/pump-interlock.hx    # paste the contents of pump-interlock.hx, save
-schedule add */30 * * * * * run /scripts/pump-interlock.hx
-schedule add 0 */5 * * * * * sensor publish moisture
+run /scripts/pump-interlock.hx        # run once: init registers the schedules and defaults target=600
 ```
+
+The script is self-contained: its `init` block registers the schedules and
+`vars setdefault target=600` once per boot. A `target` you set remotely survives reboots
+(the vars store auto-loads at boot) and is never overwritten by setdefault.
 
 Calibrate: probe dry and wet readings (`sensor publish soil` and subscribe, or `adc` on
 the shell), then pick a `target` between them (setup default: 600).
@@ -57,6 +58,6 @@ mosquitto_sub -t '<prefix>/sensor/moisture' -t '<prefix>/relay/pump/state'
 - This is the canonical "receive a value, set a pin from it" pattern: the device
   subscribes only to `<prefix>/shell/in`, and payloads there run as commands —
   `vars set` changes the value the check script compares against.
-- Send `vars save` after `vars set`: the script's `vars load` at the top of each run
-  restores values from the saved file, and that is also what survives a reboot.
+- Send `vars save` after `vars set`: the vars store auto-loads at boot, so the saved
+  `target` survives reboots and the script's `vars setdefault` leaves it untouched.
 - A manual `relay set` is re-evaluated at the next scheduled tick (30 s).

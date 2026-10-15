@@ -5,7 +5,8 @@
 `.hx` scripts and `schedule add` share one command dispatcher, so every
 keyword below works identically in both:
 
-**Output and control:** `print`, `if`/`else`/`end`, `while`/`end`, `break`, `#`
+**Output and control:** `print`, `if`/`else`/`end`, `while`/`end`, `break`,
+`init`/`end`, `#`
 **System values:** `heap`, `uptime`, `chip`, `info`, `adc`, `calc`
 **Filesystem:** `pwd`, `cd`, `ls`, `mkdir`, `touch`, `rm`, `cp`, `mv`,
 `cat`, `write`, `append`
@@ -15,11 +16,12 @@ keyword below works identically in both:
 **Sensor:** `sensor` register/unregister/list/read/publish (ultrasonic, DHT22, DS18B20, BME280) plus legacy `init|ping|read|list`
 **Motor:** `motor init`, `motor forward`, `motor reverse`, `motor stop`, `motor brake`, `motor speed`, `motor list`
 **IoT:** `post`, `mqtt`, `relay` set|toggle|status|list, `onchange`, `sensor` publish
-**Variables:** `set`, `vars list|set|get|del|save|load|clear`
+**Automation:** `schedule add|remove|list`
+**Variables:** `set`, `vars list|set|setdefault|get|del|save|load|clear`
 
 Shell-only (typing these inside a script or `schedule add` reports
 `Unknown command`): `about`, `pull`, `update`, `serve`, `i2c`, `notepad`,
-`schedule`, `powerprofile`, `cpufreq`, `fs`, `cls`, `reset`, and
+`powerprofile`, `cpufreq`, `fs`, `cls`, `reset`, and
 the `run list|install|uninstall` subcommands (spec §8 for the deferred
 group).
 
@@ -230,6 +232,33 @@ end
 - `while`/`break` are **script-only**, like `if`. A single scheduled
   `while` never opens a block.
 
+## Init Block (`init` / `end`)
+
+```bash
+init
+  schedule add */30 * * * * * run /scripts/myapp.hx
+  onchange add 4 both door
+  vars setdefault target=600
+end
+
+# the rest of the script runs on every execution
+```
+
+- The `init ... end` block runs **once per boot**. Later runs of the same
+  script skip it; a reboot is the only reset. After reboot the persisted
+  schedule fires again and re-runs the script, so init re-registers itself.
+- The once-per-boot gate is shared: `run`, the scheduler and `shell/in`
+  all consult the same RAM table keyed by script path (max 8 scripts).
+- Use only idempotent commands in `init`: `schedule add` (same cron+command
+  re-added is a no-op), `onchange add` (same rule re-added is a no-op),
+  `vars setdefault` (sets only if the name is undefined). One-time setup
+  commands that report a duplicate on re-run (`relay add`, `sensor
+  register`) belong in shell setup, not in `init`.
+- If any command in the block errors, init is **not** marked done and runs
+  again on the next execution.
+- `init` is top-level only (not nested in `if`/`while`); an unclosed block
+  is reported at end of file.
+
 ## GPIO Command (Hardware Control)
 
 ### Set Pin State
@@ -393,6 +422,8 @@ onchange list
 
 Rules persist to `/onchange.rules` (max 8 rules) and reload at boot.
 Pin mode is configured to input automatically when a rule is registered.
+Re-adding the same pin+edge+class is a no-op success (safe inside `init`
+blocks); a different edge or class on a registered pin reports a duplicate.
 
 ### `relay` — latched switch outputs
 
@@ -421,9 +452,9 @@ wifi ip                    # Show IP configuration
 
 ## Time & Schedule Commands (Automation)
 
-`time`, `settings` and `reboot` are script keywords; `schedule` itself is
-**shell-only** — but the command a task runs uses the script dispatcher
-listed at the top of this document.
+`time`, `settings`, `reboot` and `schedule add|remove|list` are script
+keywords; the command a task runs uses the script dispatcher listed at the
+top of this document.
 
 ### System Clock
 ```bash
@@ -473,7 +504,9 @@ Tasks auto-save to `/harixos/schedule.cfg` on every `add` and `remove` and
 reload at boot; there is no `schedule save` command. Ids are reassigned
 `1..N` in file order when loading, so an unchanged file reproduces the same
 ids after a reboot. A malformed line in that file is skipped with a warning
-and does not abort the load.
+and does not abort the load. Re-adding the same cron+command is a no-op
+success (idempotent), which is what makes `schedule add` safe inside
+script `init` blocks.
 
 Before NTP has synced the scheduler prints
 `no valid system time, cron not running` once per boot and fires nothing.

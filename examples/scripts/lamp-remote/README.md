@@ -20,9 +20,12 @@ mqtt start
 sensor register ldr A0 light
 relay add 5 lamp
 notepad /scripts/lamp-remote.hx       # paste the contents of lamp-remote.hx, save
-schedule add */30 * * * * * run /scripts/lamp-remote.hx
-schedule add 0 */5 * * * * * sensor publish light
+run /scripts/lamp-remote.hx           # run once: the init block registers both schedules
 ```
+
+The script is self-contained: its `init` block registers the schedules once per boot
+(idempotent). After a reboot the persisted schedule fires again and re-runs init itself,
+so nothing else needs to be re-sent.
 
 Calibrate the dark threshold: watch readings with `adc` on the shell, then adjust the
 `if $raw <= 150` line.
@@ -52,5 +55,6 @@ mosquitto_sub -t '<prefix>/sensor/light' -t '<prefix>/relay/lamp/state'
 ## Notes
 
 - The scheduled dark-detection re-latches the relay every 30 s, overriding remote
-  commands. Delete the `if/else/end` block (and its schedule entry) for pure remote control.
+  commands. For pure remote control, delete the `if/else/end` block and the first
+  `schedule add` line in the script's `init` block (keep the telemetry one).
 - Flip the LDR/resistor positions and the comparison direction if your divider is inverted.

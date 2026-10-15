@@ -60,7 +60,9 @@ schedule add 0 0 9 15 * 1 ping
   reload at boot — there is no `schedule save`. Ids are reassigned `1..N`
   in file order when loading, so an unchanged file reproduces the same ids
   after a reboot. A malformed line is skipped with a warning rather than
-  aborting the load.
+  aborting the load. Re-adding the same cron+command is a no-op success
+  (idempotent), so scripts can register their own schedules in `init`
+  blocks — see `SCRIPT-REFERENCE.md`.
 
 
 Dynamic powerprofile switching (auto power save)
@@ -109,9 +111,11 @@ Apps and variables
 - `settings` — Show and edit persistent shell settings (`settings show|banner|timezone|tz|hostname|update|save|reload`); dotted hostnames supported (e.g. `esp8266.rimu` → `esp8266.rimu.local`; resolves via mDNS on macOS/Linux — Windows natively resolves only two-label `.local` names)
 - `calc <expr>` — Evaluate arithmetic expressions (max 64 tokens per expression)
 - `set <name> = <expr>` — Store a script variable usable as `$name`
-- `vars [list|set|get|del|save|load|clear]` — Global variable store
-  (persisted to `/vars.dat`; `vars set <name>=<value>`, `vars get <name>`,
-  `vars del <name>`, `vars save`, `vars load`, `vars clear`). Limits: max 16
+- `vars [list|set|setdefault|get|del|save|load|clear]` — Global variable store
+  (persisted to `/vars.dat`; `vars set <name>=<value>`, `vars setdefault <name>=<value>`
+  sets only if the name is undefined — for idempotent `init` blocks, `vars get <name>`,
+  `vars del <name>`, `vars save`, `vars load`, `vars clear`). The store auto-loads at
+  boot; `vars load` is only needed to re-read the file after external edits. Limits: max 16
   variables, names up to 16 characters, string values up to 31 characters.
   Also a script keyword, so it works in `.hx` files, `schedule add` and MQTT `shell/in`.
 - `run <path>` / `run list` / `run install <name>` / `run uninstall <name>` —
@@ -153,7 +157,8 @@ IoT (MQTT / webhooks)
 - `onchange add <pin> <rising|falling|both>` — Register a GPIO edge rule
    (pin accepts `4` or `D2` style; rules persist to `/onchange.rules`, max 8).
    A debounced edge publishes `<mqttPrefix>/gpio/<pin>` = `on`/`off` — see
-   `ha-mqtt.md`.
+   `ha-mqtt.md`. Re-adding the same pin+edge+class is a no-op success; a
+   different edge or class on a registered pin reports a duplicate.
 - `onchange remove <pin>` — Remove a rule
 - `onchange list` — Show active rules (bare `onchange` lists too)
 

@@ -22,13 +22,14 @@ GND ────[ relay module IN ]──────────── D1 (GPIO
 wifi connect 'SSID' 'pass'
 mqtt settings <broker> 1883
 mqtt start
-onchange add 4 both door
 relay add 5 bell
-vars set prev=0
-vars save
 notepad /scripts/doorbell-remote.hx   # paste the contents of doorbell-remote.hx, save
-schedule add */2 * * * * * run /scripts/doorbell-remote.hx
+run /scripts/doorbell-remote.hx       # run once: init registers the onchange rule, the schedule, prev=0
 ```
+
+The script is self-contained: its `init` block does `onchange add`, `schedule add` and
+`vars setdefault prev=0` once per boot (all idempotent). After a reboot the persisted
+schedule re-fires and re-runs init itself.
 
 Replace `harixos` with your own prefix (check `mqtt settings`).
 
@@ -58,7 +59,7 @@ mosquitto_sub -t '<prefix>/gpio/4' -t '<prefix>/relay/bell/state'
 
 - Cron schedules need a valid system time; it syncs automatically via NTP when Wi-Fi
   connects. Schedule entries persist across reboots (schedule.cfg auto-reloads), and
-  the door state persists through the script's `vars save` / `vars load`.
+  the door state persists through the script's `vars save` (the vars store auto-loads at boot).
 - Why not a `while 1` script: the engine hard-caps while loops (5 min / 100 000
   iterations) and a running script blocks shell, web and MQTT telemetry. Short
   scheduled checks share the device with everything else.
