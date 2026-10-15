@@ -41,5 +41,11 @@ String collectSensorNames();
 // Look up a registered sensor's type by name. Returns false if not registered.
 bool sensorTypeOf(const char* name, uint8_t* type);
 
+// Last-good cached reading of `qty` for a registered sensor (the same cache
+// MQTT publish uses; refreshed by `sensor read`/`sensor publish`). Returns
+// false when the sensor is unregistered, the type does not produce `qty`, or
+// the quantity was never read (NaN cache).
+bool getSensorReading(const char* name, uint8_t qty, float* out);
+
 }  // namespace api
 }  // namespace harixos

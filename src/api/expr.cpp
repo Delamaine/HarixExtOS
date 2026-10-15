@@ -295,13 +295,20 @@ bool expand(const char *expression, char *out, size_t outCapacity,
     if (isIdentStart(c)) {                           // bare value token
       const size_t start = i;
       while (i < n && isIdentChar(expression[i])) ++i;
-      // Optional numeric argument: the whitespace and digits that follow,
-      // so the resolver sees the whole span "readpin 2".
+      // Optional arguments: whitespace-separated digit/word runs that follow,
+      // so the resolver sees the whole span "readpin 2" or
+      // "sensor hall temperature".
       size_t j = i;
-      while (j < n && (expression[j] == ' ' || expression[j] == '\t')) ++j;
-      const size_t argStart = j;
-      while (j < n && isdigit((unsigned char)expression[j])) ++j;
-      if (j > argStart) i = j;
+      for (;;) {
+        size_t k = j;
+        while (k < n && (expression[k] == ' ' || expression[k] == '\t')) ++k;
+        if (k >= n || (!isIdentStart(expression[k]) &&
+                       !isdigit((unsigned char)expression[k]))) break;
+        while (k < n && (isIdentChar(expression[k]) ||
+                         isdigit((unsigned char)expression[k]))) ++k;
+        j = k;
+      }
+      i = j;
 
       if (resolve == nullptr) return false;
       double v = 0;

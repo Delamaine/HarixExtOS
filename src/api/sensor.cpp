@@ -741,5 +741,25 @@ bool sensorTypeOf(const char* name, uint8_t* type) {
   return true;
 }
 
+bool getSensorReading(const char* name, uint8_t qty, float* out) {
+  int idx = findIndex(name);
+  if (idx < 0) return false;
+  const SensorDef& d = s_pool[idx];
+  if (!sensorHasQuantity(d.type, qty)) return false;
+  float v;
+  switch (qty) {
+    case kQtyDistance:     v = d.distance; break;
+    case kQtyTemperature:  v = d.temperature; break;
+    case kQtyHumidity:     v = d.humidity; break;
+    case kQtyPressure:     v = d.pressure; break;
+    case kQtyMoisture:     v = d.moisture; break;
+    case kQtyIlluminance:  v = d.illuminance; break;
+    default: return false;
+  }
+  if (isnan(v)) return false;
+  if (out) *out = v;
+  return true;
+}
+
 }  // namespace api
 }  // namespace harixos

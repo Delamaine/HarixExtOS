@@ -27,6 +27,7 @@ static bool fakeResolve(const char *token, size_t tokenLen, double &out) {
 
   if (tokenLen == 4 && memcmp(token, "heap", 4) == 0) { out = 41984; return true; }
   if (tokenLen == 9 && memcmp(token, "readpin 2", 9) == 0) { out = 1; return true; }
+  if (tokenLen == 23 && memcmp(token, "sensor hall temperature", 23) == 0) { out = 21.5; return true; }
   return false;
 }
 
@@ -203,6 +204,13 @@ static void test_expand_value_token_with_argument(void) {
   TEST_ASSERT_TRUE(expand("readpin 2 + 1", out, sizeof(out), fakeResolve));
   TEST_ASSERT_EQUAL_STRING("1 + 1", out);
   TEST_ASSERT_EQUAL_STRING("readpin 2", s_lastToken);
+}
+
+static void test_expand_value_token_with_word_arguments(void) {
+  char out[128];
+  TEST_ASSERT_TRUE(expand("sensor hall temperature > 30", out, sizeof(out), fakeResolve));
+  TEST_ASSERT_EQUAL_STRING("21.5 > 30", out);
+  TEST_ASSERT_EQUAL_STRING("sensor hall temperature", s_lastToken);
 }
 
 static void test_expand_unknown_bare_word_fails(void) {
@@ -386,6 +394,7 @@ int main(int argc, char **argv) {
   RUN_TEST(test_expand_undefined_variable_fails);
   RUN_TEST(test_expand_value_token_heap);
   RUN_TEST(test_expand_value_token_with_argument);
+  RUN_TEST(test_expand_value_token_with_word_arguments);
   RUN_TEST(test_expand_unknown_bare_word_fails);
   RUN_TEST(test_expand_rejects_over_length_result);
   RUN_TEST(test_expand_leaves_pure_arithmetic_untouched);

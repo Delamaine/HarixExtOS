@@ -93,6 +93,18 @@ const char* sensorQtyName(uint8_t qty) {
   return qty < kSensorQtyCount ? kNames[qty] : "";
 }
 
+bool sensorParseQty(const char* s, uint8_t* out) {
+  static const char* kNames[kSensorQtyCount] = {
+      "distance", "temperature", "humidity", "pressure", "moisture", "illuminance"};
+  for (uint8_t i = 0; i < kSensorQtyCount; ++i) {
+    if (strcmp(s, kNames[i]) == 0) {
+      *out = i;
+      return true;
+    }
+  }
+  return false;
+}
+
 const char* sensorUnit(uint8_t type, uint8_t qty) {
   switch (qty) {
     case kQtyDistance:     return "cm";

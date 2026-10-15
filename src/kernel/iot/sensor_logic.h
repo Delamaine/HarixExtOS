@@ -78,6 +78,9 @@ bool sensorHasQuantity(uint8_t type, uint8_t qty);
 // "illuminance"; "" for invalid.
 const char* sensorQtyName(uint8_t qty);
 
+// Parse a quantity name (inverse of sensorQtyName). Returns false otherwise.
+bool sensorParseQty(const char* s, uint8_t* out);
+
 // "cm" | "°C" | "%" | "hPa" | "lx"; "" for invalid.
 const char* sensorUnit(uint8_t type, uint8_t qty);
 

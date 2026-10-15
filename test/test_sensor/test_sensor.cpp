@@ -42,6 +42,25 @@ static void test_parse_type(void) {
   TEST_ASSERT_EQUAL_STRING("dht22", sensorTypeName(kSensorDht22));
 }
 
+static void test_parse_qty(void) {
+  uint8_t q = 0xFF;
+  TEST_ASSERT_TRUE(sensorParseQty("distance", &q));
+  TEST_ASSERT_EQUAL_UINT(kQtyDistance, q);
+  TEST_ASSERT_TRUE(sensorParseQty("temperature", &q));
+  TEST_ASSERT_EQUAL_UINT(kQtyTemperature, q);
+  TEST_ASSERT_TRUE(sensorParseQty("humidity", &q));
+  TEST_ASSERT_EQUAL_UINT(kQtyHumidity, q);
+  TEST_ASSERT_TRUE(sensorParseQty("pressure", &q));
+  TEST_ASSERT_EQUAL_UINT(kQtyPressure, q);
+  TEST_ASSERT_TRUE(sensorParseQty("moisture", &q));
+  TEST_ASSERT_EQUAL_UINT(kQtyMoisture, q);
+  TEST_ASSERT_TRUE(sensorParseQty("illuminance", &q));
+  TEST_ASSERT_EQUAL_UINT(kQtyIlluminance, q);
+  TEST_ASSERT_FALSE(sensorParseQty("temp", &q));
+  TEST_ASSERT_FALSE(sensorParseQty("", &q));
+  TEST_ASSERT_FALSE(sensorParseQty("Temperature", &q));
+}
+
 static void test_find_and_pin_collision(void) {
   SensorDef pool[2] = {};
   pool[0].type = kSensorUltrasonic;
@@ -201,6 +220,7 @@ int main(int argc, char **argv) {
   UNITY_BEGIN();
   RUN_TEST(test_valid_name);
   RUN_TEST(test_parse_type);
+  RUN_TEST(test_parse_qty);
   RUN_TEST(test_find_and_pin_collision);
   RUN_TEST(test_quantities_units_classes);
   RUN_TEST(test_set_and_format_reading);

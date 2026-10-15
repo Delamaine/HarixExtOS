@@ -148,6 +148,7 @@ An undefined `$name` is an **error**, never a silent `0`.
 | `heap` | free heap in bytes |
 | `adc` | analog read of A0 |
 | `readpin <n>` | `digitalRead(n)` |
+| `sensor <name> <quantity>` | last-good cached reading of a registered sensor |
 | `uptime` | seconds since boot |
 | `millis` | milliseconds since boot |
 | `time` | epoch seconds |
@@ -155,9 +156,14 @@ An undefined `$name` is an **error**, never a silent `0`.
 ```bash
 set level = readpin 2
 set stamp = time
+set tempC = sensor hall temperature
 ```
 
-`readpin` with a missing or non-numeric argument is an error.
+`readpin` with a missing or non-numeric argument is an error. `sensor` errors
+when the name is unregistered, the quantity does not match the sensor type, or
+the value was never read — run `sensor publish <name>` first (in the same
+script or via a schedule) to refresh the cache. Quantities: `distance`,
+`temperature`, `humidity`, `pressure`, `moisture`, `illuminance`.
 
 ### Expressions
 
