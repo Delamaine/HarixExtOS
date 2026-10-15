@@ -57,6 +57,10 @@ ApiResult initRelay(uint8_t pin, const char* name, bool initialLevel) {
   }
   for (uint8_t i = 0; i < kMaxRelays; ++i) {
     if (s_inited[i] && s_relays[i].state.pin == pin) {
+      if (strncmp(s_relays[i].name, name, sizeof(s_relays[i].name)) == 0) {
+        // Idempotent re-add: no-op, latched level untouched.
+        return ApiResult(API_OK, "relay " + String(name) + " already registered for GPIO" + String(pin));
+      }
       return ApiResult(API_DUPLICATE, "relay already registered for GPIO" + String(pin));
     }
   }

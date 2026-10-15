@@ -18,14 +18,14 @@ wifi connect 'SSID' 'pass'
 mqtt settings <broker> 1883
 mqtt start
 sensor register ldr A0 light
-relay add 5 lamp
 notepad /scripts/lamp-remote.hx       # paste the contents of lamp-remote.hx, save
-run /scripts/lamp-remote.hx           # run once: the init block registers both schedules
+run /scripts/lamp-remote.hx           # run once: the init block registers the lamp relay and both schedules
 ```
 
-The script is self-contained: its `init` block registers the schedules once per boot
-(idempotent). After a reboot the persisted schedule fires again and re-runs init itself,
-so nothing else needs to be re-sent.
+The script is self-contained: its `init` block registers the lamp relay (`relay add` is
+idempotent) and the schedules once per boot. After a reboot the persisted schedule fires
+again and re-runs init itself, so nothing else needs to be re-sent. (`sensor register`
+still runs once in the shell — re-registering reports a duplicate.)
 
 Calibrate the dark threshold: watch readings with `adc` on the shell, then adjust the
 `if $raw <= 150` line.

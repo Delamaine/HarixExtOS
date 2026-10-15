@@ -7,6 +7,7 @@
 # Wiring: capacitive soil sensor on A0 (dry = high reading), pump relay module on D1 (GPIO5).
 
 init
+  relay add 5 pump
   schedule add */30 * * * * * run /scripts/pump-interlock.hx
   schedule add 0 */5 * * * * * sensor publish moisture
   vars setdefault target=600

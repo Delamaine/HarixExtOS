@@ -163,7 +163,9 @@ IoT (MQTT / webhooks)
 - `onchange list` — Show active rules (bare `onchange` lists too)
 
 - `relay add <pin> <name> [on|off]` — Register a relay (initial level
-  optional, defaults to off) and persist to `/relays.conf`.
+  optional, defaults to off) and persist to `/relays.conf`. Re-adding the
+  same pin+name is a no-op success and leaves the latched level untouched
+  (idempotent, safe in `init` blocks).
 - `relay set <name> on|off` — Latch a relay on or off (level holds until
   changed). Publishes `<mqttPrefix>/relay/<name>/state`.
 - `relay toggle <name>` — Invert a relay's current level.

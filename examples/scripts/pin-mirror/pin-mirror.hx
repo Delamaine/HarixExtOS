@@ -9,6 +9,7 @@
 # plain INPUT); mirrored output on D1 (GPIO5), relay module or LED + 330R.
 
 init
+  relay add 5 mirror
   onchange add 4 both
   schedule add * * * * * * run /scripts/pin-mirror.hx
   vars setdefault force=2

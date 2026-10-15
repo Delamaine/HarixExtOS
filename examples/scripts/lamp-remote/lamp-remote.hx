@@ -6,6 +6,7 @@
 # Wiring: LDR A0 to 3V3, 10k resistor A0 to GND (bright = high reading), relay module on D1 (GPIO5).
 
 init
+  relay add 5 lamp
   schedule add */30 * * * * * run /scripts/lamp-remote.hx
   schedule add 0 */5 * * * * * sensor publish light
 end

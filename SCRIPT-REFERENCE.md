@@ -251,9 +251,10 @@ end
   all consult the same RAM table keyed by script path (max 8 scripts).
 - Use only idempotent commands in `init`: `schedule add` (same cron+command
   re-added is a no-op), `onchange add` (same rule re-added is a no-op),
-  `vars setdefault` (sets only if the name is undefined). One-time setup
-  commands that report a duplicate on re-run (`relay add`, `sensor
-  register`) belong in shell setup, not in `init`.
+  `relay add` (same pin+name re-added is a no-op and the latched level is
+  left untouched), `vars setdefault` (sets only if the name is undefined).
+  `sensor register` reports a duplicate on re-registration and belongs in
+  shell setup, not in `init`.
 - If any command in the block errors, init is **not** marked done and runs
   again on the next execution.
 - `init` is top-level only (not nested in `if`/`while`); an unclosed block
@@ -437,7 +438,10 @@ relay list                       # show registered relays (bare `relay` lists)
 
 Relays latch in software: once set, a level holds until it is changed
 again, surviving reboots. Registration and level persist to `/relays.conf`
-(max 4 relays) and reload at boot. Relay names are 1-15 chars of
+(max 4 relays) and reload at boot. Re-adding the same pin+name is a no-op
+success and leaves the latched level untouched (safe inside `init` blocks);
+a different name on a registered pin (or a different pin for a registered
+name) reports a duplicate. Relay names are 1-15 chars of
 `[A-Za-z0-9_-]` and map one GPIO to one HA `switch` when MQTT is enabled.
 
 ## WiFi Command (Networking)

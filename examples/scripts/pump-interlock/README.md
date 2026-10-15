@@ -19,14 +19,15 @@ wifi connect 'SSID' 'pass'
 mqtt settings <broker> 1883
 mqtt start
 sensor register soil A0 moisture
-relay add 5 pump
 notepad /scripts/pump-interlock.hx    # paste the contents of pump-interlock.hx, save
-run /scripts/pump-interlock.hx        # run once: init registers the schedules and defaults target=600
+run /scripts/pump-interlock.hx        # run once: init registers the pump relay, the schedules and defaults target=600
 ```
 
-The script is self-contained: its `init` block registers the schedules and
-`vars setdefault target=600` once per boot. A `target` you set remotely survives reboots
-(the vars store auto-loads at boot) and is never overwritten by setdefault.
+The script is self-contained: its `init` block registers the pump relay (`relay add` is
+idempotent), the schedules and `vars setdefault target=600` once per boot. A `target` you
+set remotely survives reboots (the vars store auto-loads at boot) and is never overwritten
+by setdefault. (`sensor register` still runs once in the shell — re-registering reports a
+duplicate.)
 
 Calibrate: probe dry and wet readings (`sensor publish soil` and subscribe, or `adc` on
 the shell), then pick a `target` between them (setup default: 600).

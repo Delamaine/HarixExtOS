@@ -22,14 +22,13 @@ GND ────[ relay module IN ]──────────── D1 (GPIO
 wifi connect 'SSID' 'pass'
 mqtt settings <broker> 1883
 mqtt start
-relay add 5 bell
 notepad /scripts/doorbell-remote.hx   # paste the contents of doorbell-remote.hx, save
-run /scripts/doorbell-remote.hx       # run once: init registers the onchange rule, the schedule, prev=0
+run /scripts/doorbell-remote.hx       # run once: init registers the bell relay, the onchange rule, the schedule, prev=0
 ```
 
-The script is self-contained: its `init` block does `onchange add`, `schedule add` and
-`vars setdefault prev=0` once per boot (all idempotent). After a reboot the persisted
-schedule re-fires and re-runs init itself.
+The script is self-contained: its `init` block does `relay add`, `onchange add`, `schedule add` and
+`vars setdefault prev=0` once per boot (all idempotent — re-adding a relay or rule that already
+exists is a no-op). After a reboot the persisted schedule re-fires and re-runs init itself.
 
 Replace `harixos` with your own prefix (check `mqtt settings`).
 

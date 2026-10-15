@@ -18,12 +18,11 @@ GND ────[ relay module IN ]───────────────
 wifi connect 'SSID' 'pass'
 mqtt settings <broker> 1883
 mqtt start
-relay add 5 mirror
 notepad /scripts/pin-mirror.hx        # paste the contents of pin-mirror.hx, save
-run /scripts/pin-mirror.hx            # run once: init registers the onchange rule, the 1 s schedule, force=2
+run /scripts/pin-mirror.hx            # run once: init registers the mirror relay, the onchange rule, the 1 s schedule, force=2
 ```
 
-The script is self-contained: its `init` block does `onchange add`, `schedule add` and
+The script is self-contained: its `init` block does `relay add`, `onchange add`, `schedule add` and
 `vars setdefault force=2` once per boot (all idempotent). After a reboot the persisted
 schedule re-fires and re-runs init itself.
 
