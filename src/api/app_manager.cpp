@@ -71,6 +71,25 @@ ApiResult AppManager::listApps(Stream &output) {
   return ApiResult(API_OK, String(count) + " app(s) installed");
 }
 
+String AppManager::resolveScriptPath(const String &path) {
+  if (path.startsWith("/")) {
+    return path;
+  }
+  const String candidates[] = {
+      String(APP_DIR) + "/" + path + ".hx",
+      String(APP_DIR) + "/" + path,
+      "/" + path + ".hx",
+      "/" + path,
+  };
+  const size_t candidateCount = sizeof(candidates) / sizeof(candidates[0]);
+  for (size_t index = 0; index < candidateCount; ++index) {
+    if (LittleFS.exists(candidates[index])) {
+      return candidates[index];
+    }
+  }
+  return "/" + path;
+}
+
 ApiResult AppManager::runApp(const String &path, Stream &output) {
   if (path.length() == 0) {
     return ApiResult(API_INVALID_ARGUMENT, "App path cannot be empty");
@@ -78,27 +97,7 @@ ApiResult AppManager::runApp(const String &path, Stream &output) {
   
   // Resolve the app location. An explicit path is used as-is; a bare name
   // looks for an installed app in /apps first, then falls back to the root.
-  String fullPath;
-  if (path.startsWith("/")) {
-    fullPath = path;
-  } else {
-    const String candidates[] = {
-        String(APP_DIR) + "/" + path + ".hx",
-        String(APP_DIR) + "/" + path,
-        "/" + path + ".hx",
-        "/" + path,
-    };
-    const size_t candidateCount = sizeof(candidates) / sizeof(candidates[0]);
-    for (size_t index = 0; index < candidateCount; ++index) {
-      if (LittleFS.exists(candidates[index])) {
-        fullPath = candidates[index];
-        break;
-      }
-    }
-    if (fullPath.length() == 0) {
-      fullPath = "/" + path;
-    }
-  }
+  String fullPath = resolveScriptPath(path);
 
   // Check if file exists
   if (!LittleFS.exists(fullPath)) {
@@ -122,7 +121,7 @@ ApiResult AppManager::runApp(const String &path, Stream &output) {
   output.printf("Running app: %s\r\n", fullPath.c_str());
   output.println(F("---"));
   
-  ApiResult result = ScriptEngine::executeScript(script, output);
+  ApiResult result = ScriptEngine::executeScript(script, output, fullPath);
   
   output.println(F("---"));
   

@@ -21,6 +21,9 @@ public:
   
   // Run a .hx app/script (can be .hx file or inline script)
   static ApiResult runApp(const String &path, Stream &output);
+
+  // Resolve a bare name or path to the script file that runApp would use.
+  static String resolveScriptPath(const String &path);
   
   // Uninstall an app
   static ApiResult uninstallApp(const String &name);

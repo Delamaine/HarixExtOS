@@ -25,6 +25,12 @@ int Scheduler::add(const char *expression, const String &command) {
     return -1;
   }
 
+  for (int i = 0; i < taskCount; ++i) {
+    if (tasks[i].expression == expression && tasks[i].command == command) {
+      return tasks[i].id;  // idempotent: same definition re-added is a no-op
+    }
+  }
+
   tasks[taskCount].id = nextId++;
   tasks[taskCount].spec = spec;
   tasks[taskCount].expression = expression;

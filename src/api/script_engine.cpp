@@ -1,8 +1,11 @@
 #include "script_engine.h"
 #include <time.h>
+#include "app_manager.h"
 #include "block_stack.h"
+#include "cron.h"
 #include "expr.h"
 #include "gpio_api.h"
+#include "init_gate.h"
 #include "wifi_api.h"
 #include "system_api.h"
 #include "tz_mapping.h"
@@ -15,6 +18,7 @@
 #include "../kernel/iot/mqtt_service.h"
 #include "../kernel/iot/onchange.h"
 #include "../kernel/iot/relay.h"
+#include "../kernel/scheduler/scheduler.h"
 #include "../utils/http/http_downloader.h"
 
 namespace {
@@ -237,12 +241,78 @@ ApiResult ScriptEngine::handleRunCommand(const String &args, Stream &output) {
     return ApiResult(API_INVALID_ARGUMENT, "Usage: run <path>");
   }
   
-  String content = harixos::readText(path);
+  // Same name resolution and init-gate key as the shell's `run`.
+  String resolved = AppManager::resolveScriptPath(path);
+
+  String content = harixos::readText(resolved);
   if (content.length() == 0) {
-    return ApiResult(API_ERROR, "Failed to read script or script empty: " + path);
+    return ApiResult(API_ERROR, "Failed to read script or script empty: " + resolved);
   }
   
-  return executeScript(content, output);
+  return executeScript(content, output, resolved);
+}
+
+ApiResult ScriptEngine::handleScheduleCommand(const String &args, Stream &output) {
+  // schedule add <sec> <min> <hour> <dom> <month> <dow> <command>
+  // schedule remove <id> | schedule list
+  String rest = args;
+  String action = takeWord(rest);
+  action.toLowerCase();
+
+  if (action.length() == 0 || action == "list") {
+    harixos::kernel::systemScheduler.listTasks(output);
+    if (action.length() == 0) {
+      output.println(F("Usage: schedule add <sec> <min> <hour> <dom> <month> <dow> <command> | schedule remove <id> | schedule list"));
+    }
+    return ApiResult(API_OK, "");
+  }
+
+  if (action == "add") {
+    if (rest.length() == 0) {
+      return ApiResult(API_INVALID_ARGUMENT, "Usage: schedule add <sec> <min> <hour> <dom> <month> <dow> <command>");
+    }
+    char tailBuf[harixos::api::cron::kMaxSaveLine];
+    rest.toCharArray(tailBuf, sizeof(tailBuf));
+    char cronBuf[64];
+    const char *command = nullptr;
+    const char *err = harixos::api::cron::splitLine(tailBuf, cronBuf,
+                                                     sizeof(cronBuf), &command);
+    int badField = -1;
+    harixos::api::cron::Spec spec;
+    if (err == nullptr) {
+      err = harixos::api::cron::parse(cronBuf, spec, &badField);
+    }
+    if (err != nullptr) {
+      if (badField >= 0) {
+        return ApiResult(API_INVALID_ARGUMENT, String(err) + " (field " + badField + ")");
+      }
+      return ApiResult(API_INVALID_ARGUMENT, err);
+    }
+    int id = harixos::kernel::systemScheduler.add(cronBuf, String(command));
+    if (id < 0) {
+      return ApiResult(API_ERROR, "Scheduler full.");
+    }
+    if (!harixos::kernel::systemScheduler.save()) {
+      return ApiResult(API_OK, String("Task scheduled with ID ") + id +
+                                   ", but /harixos/schedule.cfg could not be written.");
+    }
+    return ApiResult(API_OK, String("Task scheduled with ID ") + id);
+  }
+
+  if (action == "remove") {
+    if (rest.length() == 0) {
+      return ApiResult(API_INVALID_ARGUMENT, "Usage: schedule remove <id>");
+    }
+    if (!harixos::kernel::systemScheduler.removeTask(rest.toInt())) {
+      return ApiResult(API_ERROR, "Task not found.");
+    }
+    if (!harixos::kernel::systemScheduler.save()) {
+      return ApiResult(API_OK, "Task removed, but /harixos/schedule.cfg could not be written.");
+    }
+    return ApiResult(API_OK, "Task removed");
+  }
+
+  return ApiResult(API_INVALID_ARGUMENT, "Usage: schedule add|remove|list");
 }
 
 // --- Widened keyword groups -------------------------------------------------
@@ -560,6 +630,8 @@ ApiResult ScriptEngine::executeCommand(const String &command, Stream &output) {
     return handleSystemCommand(cmd.args, output);
   } else if (cmd.name == "run") {
     return handleRunCommand(cmd.args, output);
+  } else if (cmd.name == "schedule") {
+    return handleScheduleCommand(cmd.args, output);
   } else if (cmd.name == "heap" || cmd.name == "uptime" || cmd.name == "chip" ||
              cmd.name == "info" || cmd.name == "adc" || cmd.name == "calc") {
     return handleSystemValueCommand(cmd.name, cmd.args, output);
@@ -606,7 +678,8 @@ ApiResult ScriptEngine::executeCommand(const String &command, Stream &output) {
   }
 }
 
-ApiResult ScriptEngine::executeScript(const String &script, Stream &output) {
+ApiResult ScriptEngine::executeScript(const String &script, Stream &output,
+                                     const String &path) {
   ScriptDepthGuard guard;
   if (!guard.acquired()) {
     String message = "Script nesting limit exceeded (max ";
@@ -627,6 +700,12 @@ ApiResult ScriptEngine::executeScript(const String &script, Stream &output) {
   // of executeCommand so a scheduled `if` still reports Unknown command.
   harixos::api::BlockStack blocks;
 
+  // `init ... end` gate: the block body runs in full only once per boot per
+  // script path; later runs skip it. Reboot is the reset (init_gate.h).
+  bool inInit = false;
+  bool initSkip = false;
+  int initDepth = 0;  // skip mode only: counts nested if/while to find init's `end`
+
   output.println(F("--- Script Execution Start ---"));
   
   while (startIdx < scriptLen) {
@@ -643,7 +722,29 @@ ApiResult ScriptEngine::executeScript(const String &script, Stream &output) {
       cmd.name.toLowerCase();
       int jumpTo = -1;
 
-      if (cmd.name == "if" || cmd.name == "while") {
+      if (inInit && initSkip) {
+        // Already-done init: track its block structure, evaluate nothing.
+        if (cmd.name == "if" || cmd.name == "while") {
+          ++initDepth;
+        } else if (cmd.name == "end") {
+          if (initDepth > 0) {
+            --initDepth;
+          } else {
+            inInit = false;
+          }
+        }
+      } else if (cmd.name == "init" && !blocks.skipping()) {
+        if (inInit || blocks.depth() > 0) {
+          output.println(F("[ERROR] init must be top-level."));
+          ++errorCount;
+        } else {
+          inInit = true;
+          initSkip = path.length() > 0 && harixos::api::initAlreadyDone(path.c_str());
+          if (initSkip) {
+            output.println(F("[OK] init already done this boot, skipping"));
+          }
+        }
+      } else if (cmd.name == "if" || cmd.name == "while") {
         bool cond = false;
         if (!blocks.skipping()) {
           double v = 0;
@@ -672,6 +773,15 @@ ApiResult ScriptEngine::executeScript(const String &script, Stream &output) {
           }
         }
       } else if (cmd.name == "else" || cmd.name == "end") {
+        if (cmd.name == "end" && inInit && blocks.depth() == 0) {
+          // The `end` closing the init block. A failed init is not marked
+          // done, so it retries on the next run.
+          inInit = false;
+          if (errorCount == 0 && path.length() > 0) {
+            harixos::api::markInitDone(path.c_str());
+          }
+          jumpTo = -1;
+        } else {
         bool cond = false;
         if (cmd.name == "end" && blocks.topIsWhile() && blocks.topRunning()) {
           // Re-evaluate the while condition by re-extracting its line;
@@ -702,6 +812,7 @@ ApiResult ScriptEngine::executeScript(const String &script, Stream &output) {
           ++errorCount;
         }
         jumpTo = blocks.lastJumpTarget();
+        }
       } else if (!blocks.skipping()) {
         ApiResult result = executeCommand(line, output);
         if (result.isError()) {
@@ -724,6 +835,11 @@ ApiResult ScriptEngine::executeScript(const String &script, Stream &output) {
     }
     
     startIdx = endIdx + 1;
+  }
+
+  if (inInit) {
+    output.println(F("[ERROR] init block not closed with `end`"));
+    ++errorCount;
   }
 
   if (blocks.unclosedCount() > 0) {
@@ -809,6 +925,8 @@ void ScriptEngine::printHelp(Stream &output) {
   output.println(F("  if/else/end             Conditional blocks"));
   output.println(F("  while <cond>/end        Loop while condition is true"));
   output.println(F("  break                   Exit innermost while loop"));
+  output.println(F("  init ... end            Run block once per boot, later runs skip it"));
+  output.println(F("  schedule add|remove|list [args]  Cron tasks (idempotent add)"));
   output.println(F("  # comment               Script comment"));
   output.println(F("  help                    Show this help"));
 }

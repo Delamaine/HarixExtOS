@@ -252,9 +252,9 @@ bool delByName(const char *name) {
 
 namespace {
 const char kUsage[] =
-    "Usage: vars [list|set|get|del|save|load|clear] [args...]";
+    "Usage: vars [list|set|setdefault|get|del|save|load|clear] [args...]";
 const char kUnknownAction[] =
-    "Unknown vars action: list, set, get, del, save, load, clear";
+    "Unknown vars action: list, set, setdefault, get, del, save, load, clear";
 char g_errorBuf[96];
 
 bool ieq(const char *a, const char *b) {
@@ -316,6 +316,28 @@ const char *runCommand(const char *args,
     if (!expr::parseSet(text, name, sizeof(name), &expression)) {
       return "Usage: vars set <name>=<value>";
     }
+    snprintf(text, sizeof(text), "%s = %.10g", name, value);
+    emit(text, ctx);
+    return nullptr;
+  }
+
+  if (ieq(action, "setdefault")) {
+    if (*rest == '\0') return "Usage: vars setdefault <name>=<value>";
+    copyTrimmed(text, sizeof(text), rest);
+    char name[kMaxNameLength + 1];
+    const char *expression = nullptr;
+    if (!expr::parseSet(text, name, sizeof(name), &expression)) {
+      return "Usage: vars setdefault <name>=<value>";
+    }
+    double existing = 0;
+    if (get(name, existing)) {
+      snprintf(g_errorBuf, sizeof(g_errorBuf), "%s kept at %.10g.", name, existing);
+      emit(g_errorBuf, ctx);
+      return nullptr;
+    }
+    double value = 0;
+    const char *err = expr::assign(text, &value);
+    if (err != nullptr) return err;
     snprintf(text, sizeof(text), "%s = %.10g", name, value);
     emit(text, ctx);
     return nullptr;

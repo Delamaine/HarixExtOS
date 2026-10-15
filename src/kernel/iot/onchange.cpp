@@ -38,6 +38,9 @@ ApiResult registerOnchange(uint8_t pin, EdgeMode edgeMode,
   }
   uint8_t idx = findRuleIndex(pin);
   if (idx < s_ruleCount && s_rules[idx].active) {
+    if (s_rules[idx].edgeMode == edgeMode && s_rules[idx].deviceClass == deviceClass) {
+      return ApiResult(API_OK, "onchange rule already registered for GPIO" + String(pin));
+    }
     return ApiResult(API_DUPLICATE, "onchange rule already registered for GPIO" + String(pin));
   }
   if (s_ruleCount >= kMaxOnchangeRules) {

@@ -24,8 +24,10 @@ namespace api {
 
 class ScriptEngine {
 public:
-  // Execute a .hx script from string
-  static ApiResult executeScript(const String &script, Stream &output = Serial);
+  // Execute a .hx script from string. `path` is the script's own path when
+  // known; it keys the once-per-boot `init ... end` gate (see init_gate.h).
+  static ApiResult executeScript(const String &script, Stream &output = Serial,
+                                 const String &path = "");
   
   // Execute a single command
   static ApiResult executeCommand(const String &command, Stream &output = Serial);
@@ -42,6 +44,7 @@ private:
   static ApiResult handlePrintCommand(const String &args, Stream &output);
   static ApiResult handleSetCommand(const String &args, Stream &output);
   static ApiResult handleRunCommand(const String &args, Stream &output);
+  static ApiResult handleScheduleCommand(const String &args, Stream &output);
 
   // Keyword groups widened so `schedule add` can run real commands. Each
   // delegates to the API or filesystem layer; none reimplements a shell

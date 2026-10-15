@@ -134,6 +134,23 @@ static void test_run_command_set_stores_and_echoes(void) {
   TEST_ASSERT_NOT_NULL(strstr(g_out, "a = 42"));
 }
 
+static void test_run_command_setdefault_sets_when_missing(void) {
+  const char *err = runCommand("setdefault d=600", captureLine, nullptr);
+  if (err != nullptr) TEST_FAIL_MESSAGE(err);
+  double v = 0;
+  TEST_ASSERT_TRUE(get("d", v));
+  TEST_ASSERT_EQUAL_DOUBLE(600, v);
+}
+
+static void test_run_command_setdefault_keeps_existing(void) {
+  runCommand("set d=650", captureLine, nullptr);
+  const char *err = runCommand("setdefault d=600", captureLine, nullptr);
+  if (err != nullptr) TEST_FAIL_MESSAGE(err);
+  double v = 0;
+  TEST_ASSERT_TRUE(get("d", v));
+  TEST_ASSERT_EQUAL_DOUBLE(650, v);
+}
+
 static void test_run_command_set_invalid_expression_is_error(void) {
   const char *err = runCommand("set a=", captureLine, nullptr);
   TEST_ASSERT_NOT_NULL(err);
@@ -211,6 +228,8 @@ int main(int argc, char **argv) {
   RUN_TEST(test_run_command_null_returns_usage);
   RUN_TEST(test_run_command_unknown_action);
   RUN_TEST(test_run_command_set_stores_and_echoes);
+  RUN_TEST(test_run_command_setdefault_sets_when_missing);
+  RUN_TEST(test_run_command_setdefault_keeps_existing);
   RUN_TEST(test_run_command_set_invalid_expression_is_error);
   RUN_TEST(test_run_command_get_emits_value);
   RUN_TEST(test_run_command_get_missing_is_error);

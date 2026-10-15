@@ -2594,6 +2594,7 @@ void setup() {
 
   shellSettings = harixos::loadSettings();
   harixos::kernel::systemScheduler.load();
+  harixos::api::vars::load(harixos::api::vars::kPersistPath);
   const char* bootPosix = harixos::api::tz::toPosix(shellSettings.timezone.c_str());
   setenv("TZ", bootPosix, 1);
   tzset();
