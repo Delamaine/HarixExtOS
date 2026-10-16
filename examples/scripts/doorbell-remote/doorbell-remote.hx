@@ -16,7 +16,7 @@ end
 set open = readpin 4
 if $open != $prev
   if $open == 1
-    beep 10 880 300
+    beep 14 880 300
   end
   set prev = $open
   vars save

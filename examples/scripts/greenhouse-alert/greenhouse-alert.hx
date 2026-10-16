@@ -8,7 +8,7 @@
 # through a 100R resistor, buzzer - to GND.
 
 init
-  schedule add */5 * * * * * run /scripts/greenhouse-alert.hx
+  schedule add 0 */5 * * * * run /scripts/greenhouse-alert.hx
   vars setdefault max_temp=32
   vars setdefault max_hum=70
 end

@@ -12,7 +12,7 @@ the shell, web UI and telemetry stay responsive between ticks.
 GND ────[ reed switch ]──── D2 (GPIO4) ────[ 10k resistor ]──── 3V3
         reed closed when door shut; the external pull-up is required because
         "onchange add" sets plain INPUT (no internal pull-up)
-GND ────[ buzzer − ]   D5 (GPIO10) ──[ buzzer + ]── 3V3
+GND ────[ buzzer − ]   D5 (GPIO14) ──[ buzzer + ]── 3V3
 GND ────[ relay module IN ]──────────── D1 (GPIO5)   optional bell/lock relay
 ```
 
@@ -43,7 +43,7 @@ Replace `harixos` with your own prefix (check `mqtt settings`).
 ## Driving it remotely
 
 ```sh
-mosquitto_pub -t '<prefix>/shell/in' -m 'beep 10 880 300'      # beep buzzer 300 ms
+mosquitto_pub -t '<prefix>/shell/in' -m 'beep 14 880 300'      # beep buzzer 300 ms
 mosquitto_pub -t '<prefix>/shell/in' -m 'relay set bell on'    # ring/lock remotely
 mosquitto_pub -t '<prefix>/shell/in' -m 'relay set bell off'
 ```
@@ -63,4 +63,4 @@ mosquitto_sub -t '<prefix>/gpio/4' -t '<prefix>/relay/bell/state'
   iterations) and a running script blocks shell, web and MQTT telemetry. Short
   scheduled checks share the device with everything else.
 - Script-free variant: drop the schedule entry and let a Home Assistant automation on
-  `<prefix>/gpio/4` publish `beep 10 880 300` back to `shell/in`.
+  `<prefix>/gpio/4` publish `beep 14 880 300` back to `shell/in`.

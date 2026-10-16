@@ -9,7 +9,7 @@
 
 init
   servo attach 4
-  schedule add */10 * * * * * run /scripts/sun-blind.hx
+  schedule add 0 */10 * * * * run /scripts/sun-blind.hx
   vars setdefault dark=20
   vars setdefault bright=60
 end

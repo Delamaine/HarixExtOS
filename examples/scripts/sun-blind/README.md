@@ -22,7 +22,7 @@ servo V+ (5V from USB)   servo GND ─────────── GND
 wifi connect 'SSID' 'pass'
 mqtt settings <broker> 1883
 mqtt start
-sensor register ldr sun
+sensor register ldr A0 sun
 notepad /scripts/sun-blind.hx    # paste the contents of sun-blind.hx, save
 run /scripts/sun-blind.hx        # run once: init attaches the servo, registers the schedule and defaults the thresholds
 ```

@@ -8,7 +8,7 @@
 
 init
   relay add 5 fan
-  schedule add */2 * * * * * run /scripts/fan-control.hx
+  schedule add 0 */2 * * * * run /scripts/fan-control.hx
   vars setdefault on_at=30
   vars setdefault off_at=27
 end
