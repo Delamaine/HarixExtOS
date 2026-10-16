@@ -11,9 +11,9 @@ keyword below works identically in both:
 **Filesystem:** `pwd`, `cd`, `ls`, `mkdir`, `touch`, `rm`, `cp`, `mv`,
 `cat`, `write`, `append`
 **Settings and time:** `settings`, `time`, `reboot`
-**WiFi and GPIO:** `wifi`, `gpio`, `delay`, `system`, `run <path>`, `help`
+**WiFi and GPIO:** `wifi`, `gpio`, `beep`, `delay`, `system`, `run <path>`, `help`
 **Servo:** `servo attach`, `servo detach`, `servo write`, `servo read`, `servo list`
-**Sensor:** `sensor` register/unregister/list/read/publish (ultrasonic, DHT22, DS18B20, BME280) plus legacy `init|ping|read|list`
+**Sensor:** `sensor` register/unregister/list/read/publish (ultrasonic, DHT22, DS18B20, BME280, soil, LDR, BH1750) plus legacy `init|ping|read|list`
 **Motor:** `motor init`, `motor forward`, `motor reverse`, `motor stop`, `motor brake`, `motor speed`, `motor list`
 **IoT:** `post`, `mqtt`, `relay` set|toggle|status|list, `onchange`, `sensor` publish
 **Automation:** `schedule add|remove|list`
@@ -136,10 +136,34 @@ set h = $heap      # h = 5        — $heap reads the variable
 set b = heap       # b = <free heap> — a bare heap reads the real value
 ```
 
-`print` echoes its argument verbatim and does **not** expand `$name` or value
-tokens. Use `set` or `calc` when you need to see an expanded value.
+`print` expands `$name` in its argument — handy to dump a var. Bare value
+tokens (`heap`, `readpin`, …) expand only inside `set` / `calc` / `if` /
+`while` expressions; use `set` or `calc` when you need to see those.
 
-An undefined `$name` is an **error**, never a silent `0`.
+An undefined `$name` is an **error** in ordinary commands, never a silent
+`0` — except in `print` / `post` / `write` / `append`, where it stays
+literal (see below).
+
+### `$name` in command arguments
+
+Command arguments expand `$name` before the command runs, so knobs can be
+tuned without editing scripts:
+
+```bash
+vars set speed=75
+motor speed $speed m1
+delay $wait                # after set wait=1200
+```
+
+- String variables (`vars set name=text`) substitute their text; numbers
+  substitute their formatted value.
+- `print`, `post`, `write` and `append` use **lenient expansion**: defined
+  vars substitute, but an undefined `$name` stays literal instead of
+  erroring — so JSON bodies and shell text containing `$` survive.
+- Bare value tokens (`heap`, `adc`, `readpin`, `sensor …`) expand only inside
+  `set` / `calc` / `if` / `while` expressions; in arguments a bare word is
+  always literal (a relay named `heap` stays `heap`).
+- A `$` not followed by a name passes through literally (URLs, JSON bodies).
 
 ### Value tokens
 
@@ -310,6 +334,19 @@ gpio 15                    # Available (LOW required at boot)
 gpio 16                    # Available
 ```
 
+## Beep Command (Buzzer Tone)
+
+```bash
+beep 14              # 1000 Hz for 200 ms (defaults)
+beep 14 880 300      # 880 Hz for 300 ms
+```
+
+- `beep <pin> [hz] [ms]` works in the shell, inside `.hx` scripts, and in
+  `schedule add` tasks. hz is 37-5000, ms is 10-10000.
+- The pin must be an available GPIO (GPIO6-11 are flash pins and rejected).
+  `beep` is also refused when the pin is attached to a servo or used by a
+  motor, because `tone()` shares the PWM hardware with them.
+
 ## Servo Command (Servo Motors)
 
 ```bash
@@ -342,6 +379,9 @@ sensor register ultrasonic <trigger> <echo> <name>   # HC-SR04
 sensor register dht22 <pin> <name>                   # DHT22
 sensor register ds18b20 <pin> [index] <name>         # DS18B20 (daisy-chain index)
 sensor register bme280 <name>                        # BME280/BMP280 (I2C)
+sensor register soil A0 <name>                       # capacitive soil (A0 only)
+sensor register ldr A0 <name>                        # LDR voltage divider (A0 only)
+sensor register bh1750 <name>                        # BH1750 lux meter (I2C 0x23)
 sensor unregister <name>
 sensor list
 sensor read <name>            # read now, print all quantities
@@ -406,6 +446,11 @@ post https://api.example.com/event {"type":"gpio","pin":2}
 post http://localhost:8080/log hello text/plain
 ```
 
+$name expands in the URL and body with **lenient** semantics: defined vars
+substitute, an undefined `$name` stays literal, so a body can mix both —
+`post https://api.example.com/e {"v":"$temp","note":"$schema"}` posts the
+`temp` value and the literal `$schema` without either breaking the request.
+
 ### `mqtt` — MQTT service
 
 ```bash
@@ -422,10 +467,14 @@ Broker, prefix and interval are configured with `mqtt_*` keys in
 ### `onchange` — GPIO edge rules
 
 ```bash
-onchange add <pin> <rising|falling|both>   # pin accepts GPIO numbers or D2 style
+onchange add <pin> <rising|falling|both> [class]   # pin accepts GPIO numbers or D2 style
 onchange remove <pin>
 onchange list
 ```
+
+The optional third argument sets the Home Assistant binary_sensor device
+class: `motion`, `occupancy`, `door`, `window` or `moisture` (default
+`motion`). Example: `onchange add 4 both door`.
 
 Rules persist to `/onchange.rules` (max 8 rules) and reload at boot.
 Pin mode is configured to input automatically when a rule is registered.
@@ -526,9 +575,12 @@ Before NTP has synced the scheduler prints
 
 ```bash
 delay 1000                 # Wait 1000 milliseconds (1 second)
-delay 500                  # Wait 500 milliseconds (0.5 seconds)
+delay 500                  # Wait 0.5 seconds (500ms)
 delay 100                  # Wait 100 milliseconds
 ```
+
+The value is an integer millisecond count. `$name` expands first
+(`delay $wait`), but arithmetic is not evaluated — `delay 100*2` is invalid.
 
 ## System Command (Device Info)
 

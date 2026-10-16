@@ -365,6 +365,57 @@ static void test_assign_rejects_missing_equals(void) {
   TEST_ASSERT_EQUAL_INT((int)before, (int)harixos::api::vars::count());
 }
 
+static void test_expand_args_numeric_var(void) {
+  set("ms", 1200);
+  char out[64];
+  TEST_ASSERT_NULL(harixos::api::expr::expandArgs("$ms", out, sizeof(out)));
+  TEST_ASSERT_EQUAL_STRING("1200", out);
+}
+
+static void test_expand_args_inside_text(void) {
+  set("pct", 75);
+  char out[64];
+  TEST_ASSERT_NULL(harixos::api::expr::expandArgs("speed $pct m1", out, sizeof(out)));
+  TEST_ASSERT_EQUAL_STRING("speed 75 m1", out);
+}
+
+static void test_expand_args_string_var(void) {
+  TEST_ASSERT_TRUE(harixos::api::vars::setString("msg", "hello"));
+  char out[64];
+  TEST_ASSERT_NULL(harixos::api::expr::expandArgs("pub t $msg", out, sizeof(out)));
+  TEST_ASSERT_EQUAL_STRING("pub t hello", out);
+}
+
+static void test_expand_args_dollar_passthrough(void) {
+  char out[64];
+  TEST_ASSERT_NULL(harixos::api::expr::expandArgs("cost $ and $5", out, sizeof(out)));
+  TEST_ASSERT_EQUAL_STRING("cost $ and $5", out);
+}
+
+static void test_expand_args_undefined_is_error(void) {
+  char out[64];
+  TEST_ASSERT_NOT_NULL(harixos::api::expr::expandArgs("$nope", out, sizeof(out)));
+}
+
+static void test_expand_args_plain_text_untouched(void) {
+  char out[64];
+  TEST_ASSERT_NULL(harixos::api::expr::expandArgs("0 */5 * * * *", out, sizeof(out)));
+  TEST_ASSERT_EQUAL_STRING("0 */5 * * * *", out);
+}
+
+static void test_expand_args_lenient_undefined_stays_literal(void) {
+  char out[64];
+  TEST_ASSERT_NULL(harixos::api::expr::expandArgs("keep $nope", out, sizeof(out), false));
+  TEST_ASSERT_EQUAL_STRING("keep $nope", out);
+}
+
+static void test_expand_args_lenient_mixed(void) {
+  set("ms", 1200);
+  char out[80];
+  TEST_ASSERT_NULL(harixos::api::expr::expandArgs("{\"v\":\"$ms\",\"s\":\"$nope\"}", out, sizeof(out), false));
+  TEST_ASSERT_EQUAL_STRING("{\"v\":\"1200\",\"s\":\"$nope\"}", out);
+}
+
 int main(int argc, char **argv) {
   UNITY_BEGIN();
   RUN_TEST(test_precedence_multiply_over_add);
@@ -415,5 +466,13 @@ int main(int argc, char **argv) {
   RUN_TEST(test_assign_leaves_variable_untouched_on_error);
   RUN_TEST(test_assign_rejects_invalid_name_without_storing);
   RUN_TEST(test_assign_rejects_missing_equals);
+  RUN_TEST(test_expand_args_numeric_var);
+  RUN_TEST(test_expand_args_inside_text);
+  RUN_TEST(test_expand_args_string_var);
+  RUN_TEST(test_expand_args_dollar_passthrough);
+  RUN_TEST(test_expand_args_undefined_is_error);
+  RUN_TEST(test_expand_args_plain_text_untouched);
+  RUN_TEST(test_expand_args_lenient_undefined_stays_literal);
+  RUN_TEST(test_expand_args_lenient_mixed);
   return UNITY_END();
 }

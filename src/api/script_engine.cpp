@@ -615,7 +615,23 @@ ApiResult ScriptEngine::executeCommand(const String &command, Stream &output) {
   }
   
   cmd.name.toLowerCase();
-  
+
+  // $name in command arguments expands before dispatch (scheduler, MQTT
+  // shell/in and scripts all arrive here). print/post/write/append use
+  // lenient expansion -- defined vars substitute, an undefined $name stays
+  // literal so text bodies and JSON survive.
+  {
+    char expanded[harixos::api::expr::kMaxExpandedLength + 1];
+    const bool textCmd = cmd.name == "print" || cmd.name == "post" ||
+                         cmd.name == "write" || cmd.name == "append";
+    const char *err = harixos::api::expr::expandArgs(
+        cmd.args.c_str(), expanded, sizeof(expanded), !textCmd);
+    if (err != nullptr) {
+      return ApiResult(API_INVALID_ARGUMENT, err);
+    }
+    cmd.args = expanded;
+  }
+
   if (cmd.name == "print") {
     return handlePrintCommand(cmd.args, output);
   } else if (cmd.name == "set") {

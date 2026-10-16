@@ -16,6 +16,15 @@ bool expand(const char *expression, char *out, size_t outCapacity,
             bool (*resolve)(const char *token, size_t tokenLen, double &out));
 void setResolver(bool (*resolve)(const char *token, size_t tokenLen, double &out));
 
+// Substitute $name references in a command argument string: string variables
+// insert their text, numbers their formatted value. A '$' not followed by an
+// identifier start passes through literally; an over-length result is an
+// error. With strictUndefined, an undefined name is also an error; without
+// it (print/post/write/append) the reference stays literal so text bodies
+// survive. Returns nullptr on success or a static message.
+const char *expandArgs(const char *in, char *out, size_t outCapacity,
+                       bool strictUndefined = true);
+
 // expand() followed by evaluateArithmetic().
 bool evaluate(const char *expression, double &out);
 

@@ -336,6 +336,77 @@ bool expand(const char *expression, char *out, size_t outCapacity,
   return true;
 }
 
+const char *expandArgs(const char *in, char *out, size_t outCapacity,
+                       bool strictUndefined) {
+  if (in == nullptr || out == nullptr || outCapacity == 0) {
+    return "Invalid expression.";
+  }
+  size_t limit = outCapacity;
+  if (limit > kMaxExpandedLength + 1) limit = kMaxExpandedLength + 1;
+
+  size_t o = 0;
+  const size_t n = strlen(in);
+  size_t i = 0;
+  char num[48];
+  char str[vars::kMaxStringValue];
+
+  while (i < n) {
+    const char c = in[i];
+    if (c != '$') {
+      if (o + 2 > limit) return "Expansion too long.";
+      out[o++] = c;
+      ++i;
+      continue;
+    }
+    ++i;
+    // A '$' not followed by an identifier start passes through literally
+    // (URLs, JSON bodies, shell-quoted text).
+    if (i >= n || !isIdentStart(in[i])) {
+      if (o + 2 > limit) return "Expansion too long.";
+      out[o++] = '$';
+      continue;
+    }
+    const size_t start = i;
+    while (i < n && isIdentChar(in[i])) ++i;
+    const size_t len = i - start;
+
+    const char *text = nullptr;
+    size_t textLen = 0;
+    bool found = false;
+    if (len <= vars::kMaxNameLength) {
+      char name[vars::kMaxNameLength + 1];
+      memcpy(name, in + start, len);
+      name[len] = '\0';
+      double v = 0;
+      if (vars::getString(name, str, sizeof(str))) {
+        text = str;
+        textLen = strlen(str);
+        found = true;
+      } else if (vars::get(name, v)) {
+        formatDouble(v, num, sizeof(num));
+        text = num;
+        textLen = strlen(num);
+        found = true;
+      }
+    }
+    if (!found) {
+      if (strictUndefined) return "Undefined variable.";
+      // Lenient mode (print/post/write/append): an undefined $name stays
+      // literal so text bodies and JSON survive.
+      if (o + 2 + len + 1 > limit) return "Expansion too long.";
+      out[o++] = '$';
+      memcpy(out + o, in + start, len);
+      o += len;
+      continue;
+    }
+    if (o + textLen + 1 > limit) return "Expansion too long.";
+    memcpy(out + o, text, textLen);
+    o += textLen;
+  }
+  out[o] = '\0';
+  return nullptr;
+}
+
 bool evaluate(const char *expression, double &out) {
   char buf[kMaxExpandedLength + 1];
   if (!expand(expression, buf, sizeof(buf), s_resolver)) return false;
