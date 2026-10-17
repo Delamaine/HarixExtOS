@@ -1,5 +1,7 @@
 # pet-feeder
 
+[Back to index](../README.md)
+
 An automatic pet feeder: a servo-driven hopper opens at 07:30 and 18:30 for
 `$hold` milliseconds, then closes. Portion size is the open angle
 (`$open_angle`), dwell is the hold time — both are `$vars` knobs, so you
@@ -47,6 +49,9 @@ mosquitto_pub -t '<prefix>/shell/in' -m 'run /scripts/pet-feeder.hx'   # feed no
 
 ## Notes
 
+- For large or irregular biscuits where the flap's timed drop can't
+  guarantee a count, see **drum-feeder** — positive displacement, one
+  biscuit per cycle.
 - `servo write 4 $open_angle` and `delay $hold` are the arg-expansion
   feature in action — both values come from the vars store.
 - Skip a meal without editing anything: `schedule list` →
@@ -54,3 +59,7 @@ mosquitto_pub -t '<prefix>/shell/in' -m 'run /scripts/pet-feeder.hx'   # feed no
 - If the servo buzzes at rest, add `delay $hold` before the `servo write 4 0`
   return — already in the script; remove it only if your servo handles the
   full-travel snap.
+- The script detaches the servo after the last write, so the horn is limp
+  between feeds: no holding-torque draw (~10-100 mA) and no pulse glitches
+  under `powerprofile light`. Delete the detach line to keep the flap
+  gripping.

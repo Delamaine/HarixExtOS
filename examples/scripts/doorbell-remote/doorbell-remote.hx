@@ -3,7 +3,8 @@
 # publication, the check schedule, and the prev default once per boot (idempotent --
 # safe to re-run). The edges themselves reach MQTT via onchange (<prefix>/gpio/4 + HA
 # binary_sensor) -- no script needed there.
-# Door state lives in the persistent vars store (prev), auto-loaded at boot.
+# prev is RAM-only: after a reboot it resets to closed, so a door left open
+# rings the bell once at boot (same trade as door-chime).
 # Wiring: reed D2 (GPIO4) to GND + external 10k pull-up to 3V3 ("onchange add" forces plain INPUT).
 
 init
@@ -19,5 +20,4 @@ if $open != $prev
     beep 14 880 300
   end
   set prev = $open
-  vars save
 end

@@ -1,5 +1,7 @@
 # doorbell-remote
 
+[Back to index](../README.md)
+
 Reed-switch door sensor on D2. Open/close edges reach MQTT through the built-in
 `onchange` rule (`<prefix>/gpio/4`, plus a Home Assistant binary_sensor with device
 class `door`) — no script needed for that. A short check script, run by the built-in
@@ -57,8 +59,8 @@ mosquitto_sub -t '<prefix>/gpio/4' -t '<prefix>/relay/bell/state'
 ## Notes
 
 - Cron schedules need a valid system time; it syncs automatically via NTP when Wi-Fi
-  connects. Schedule entries persist across reboots (schedule.cfg auto-reloads), and
-  the door state persists through the script's `vars save` (the vars store auto-loads at boot).
+  connects. Schedule entries persist across reboots (schedule.cfg auto-reloads). The
+  door state (`prev`) is RAM-only — a door left open rings once at boot.
 - Why not a `while 1` script: the engine hard-caps while loops (5 min / 100 000
   iterations) and a running script blocks shell, web and MQTT telemetry. Short
   scheduled checks share the device with everything else.
