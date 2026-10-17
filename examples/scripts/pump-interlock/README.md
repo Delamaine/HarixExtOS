@@ -1,5 +1,7 @@
 # pump-interlock
 
+[Back to index](../README.md)
+
 Soil-moisture telemetry on A0 plus a pump relay whose behavior follows a
 **remotely-sent threshold value**: a client publishes `vars set target=<value>` (then
 `vars save`) on `shell/in`, and the scheduled check script sets the pump pin from the

@@ -1,5 +1,7 @@
 # daily-digest
 
+[Back to index](../README.md)
+
 A zero-hardware daily health digest: one cron job at 08:00 prints a one-line
 summary (free heap, uptime, epoch) to the console / web UI and posts the
 same numbers as JSON to an ntfy topic. It is also the `print` example —

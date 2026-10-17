@@ -1,5 +1,7 @@
 # sun-blind
 
+[Back to index](../README.md)
+
 A servo-driven blind that opens when the room gets bright and closes in
 darkness, with both thresholds remotely retunable. The script reads the
 registered `ldr` sensor's cached illuminance through the `sensor <name> illuminance`
@@ -65,3 +67,6 @@ mosquitto_sub -t '<prefix>/sensor/sun/illuminance'
   `illuminance`) from the retained publishes — no script-side HA work needed.
 - Servo jitter: the servo holds its last angle between runs; only threshold
   crossings write a new angle.
+- A held servo needs continuous pulses. Under `powerprofile light` the CPU
+  pauses between DTIM beacons and pulses glitch (droop/jitter), so keep the
+  profile at `full`/`balanced` while the blind must stay put.

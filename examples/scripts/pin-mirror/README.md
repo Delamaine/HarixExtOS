@@ -1,5 +1,7 @@
 # pin-mirror
 
+[Back to index](../README.md)
+
 Mirrors an input pin onto an output relay, with input edges published to MQTT by the
 built-in `onchange` rule. A remote client overrides the relay by sending a **value** on
 `shell/in` — the scheduled check script reads it and sets the pin from it.

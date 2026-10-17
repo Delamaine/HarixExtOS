@@ -1,5 +1,7 @@
 # radar-sweep
 
+[Back to index](../README.md)
+
 An ultrasonic distance radar on a servo head. Every 2 s the script advances
 the head to the next position (0° → 90° → 180° → 0°), lets it settle, then
 refreshes the cached distance — so `<prefix>/sensor/radar/distance` traces the
@@ -67,3 +69,6 @@ mosquitto_sub -t '<prefix>/sensor/radar/distance'
 - Finer resolution: multiply smaller and wrap earlier — e.g.
   `set pos = $step * 30` with `if $step > 6` for seven positions.
   `vars setdefault step=0` keeps the head home after every reboot.
+- A held servo needs continuous pulses. Under `powerprofile light` the CPU
+  pauses between DTIM beacons and pulses glitch (droop/jitter), so keep the
+  profile at `full`/`balanced` while the script runs or the head must hold.

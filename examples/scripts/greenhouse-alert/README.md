@@ -1,5 +1,7 @@
 # greenhouse-alert
 
+[Back to index](../README.md)
+
 A DHT22 over-limit alarm for a greenhouse corner: every 5 minutes the script
 reads the registered sensor's cached temperature and humidity through the
 `sensor <name> <quantity>` value tokens and beeps when either limit is

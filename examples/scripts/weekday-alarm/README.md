@@ -1,5 +1,7 @@
 # weekday-alarm
 
+[Back to index](../README.md)
+
 A weekday wake-up alarm: three beeps plus the lamp at 07:00 Mon-Fri, lamp off
 again at 07:30. The example teaches hour- and dow-restricted cron — every other
 example only uses `*/N` intervals — and running a script (not a single command)
@@ -47,8 +49,10 @@ mosquitto_pub -t '<prefix>/shell/in' -m 'schedule remove 1'                   # 
 mosquitto_pub -t '<prefix>/shell/in' -m 'schedule add 0 0 6 * * 1,2,3,4,5 run /scripts/weekday-alarm.hx'   # wake at 06:00
 ```
 
-(Schedule ids are reassigned in file order at boot — check `schedule list`
-before removing. Scheduled tasks auto-save; there is no `schedule save`.)
+(Schedule ids persist across reboots — `schedule list` shows them.
+To pin one, add it as `schedule add id=<n> ...` so `schedule remove <n>`
+always targets the same job. Scheduled tasks auto-save; there is no
+`schedule save`.)
 
 ## Notes
 

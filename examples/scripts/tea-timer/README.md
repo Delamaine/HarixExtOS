@@ -1,5 +1,7 @@
 # tea-timer
 
+[Back to index](../README.md)
+
 A brew timer with a real appliance relay: the kettle (or hot plate) stays on
 for `$minutes`, then switches off with a beep. The whole point is the
 `delay $ms` line — command arguments expand `$vars`, so the duration is a

@@ -1,5 +1,7 @@
 # door-chime
 
+[Back to index](../README.md)
+
 A door melody instead of a single beep: every closed→open edge plays a
 short `while`-driven tune — `$notes` blips at 880 Hz with `$gap` ms between
 them, then a longer 1175 Hz finish. Mute it from the couch with

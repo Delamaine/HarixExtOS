@@ -1,5 +1,7 @@
 # weather-station
 
+[Back to index](../README.md)
+
 An I2C weather corner: BME280 (temp/humidity/pressure) and BH1750 (illuminance)
 publish retained telemetry every 15 minutes for Home Assistant discovery, and the
 script beeps a frost alarm when the cached temperature drops below a remotely

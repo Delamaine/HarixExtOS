@@ -1,5 +1,7 @@
 # lamp-remote
 
+[Back to index](../README.md)
+
 Publishes the A0 light reading as MQTT telemetry and switches a lamp relay. A short
 scheduled check keeps the lamp on when dark as local fallback; a remote client can
 command the lamp directly.

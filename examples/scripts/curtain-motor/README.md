@@ -1,5 +1,7 @@
 # curtain-motor
 
+[Back to index](../README.md)
+
 A motorized curtain driven by the `motor` command family with limit switches.
 `vars set cmd=open` (or `close`) drives m1 forward/reverse until the end
 switch closes or `$travel` seconds pass — whichever comes first. The stop

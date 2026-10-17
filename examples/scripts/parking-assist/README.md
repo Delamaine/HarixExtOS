@@ -1,5 +1,7 @@
 # parking-assist
 
+[Back to index](../README.md)
+
 A garage parking aid: HC-SR04 distance drives a buzzer that beeps slowly under
 `warn` cm and fast under `stop` cm. Both distances are remotely retunable. The
 script reads the registered ultrasonic sensor's cached distance through the

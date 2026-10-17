@@ -1,5 +1,7 @@
 # fan-control
 
+[Back to index](../README.md)
+
 A temperature-controlled fan: DS18B20 readings drive a relay with hysteresis
 (on above `on_at`, off below `off_at`), and both switch points are remotely
 retunable. The script reads the registered DS18B20's cached temperature through

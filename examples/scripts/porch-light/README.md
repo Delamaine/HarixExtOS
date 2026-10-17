@@ -1,5 +1,7 @@
 # porch-light
 
+[Back to index](../README.md)
+
 A PIR-triggered porch light with a remotely tunable hold time. Motion sets an
 epoch deadline (the `time` value token), and the light drops when the clock
 passes it — no loops, the script exits every tick. The deadline lives in RAM,

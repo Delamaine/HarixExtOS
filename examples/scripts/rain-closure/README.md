@@ -1,5 +1,7 @@
 # rain-closure
 
+[Back to index](../README.md)
+
 Rain closes the awning — automatically, once per shower. A moisture probe on
 the fabric is polled every 5 s; the moment the reading crosses the
 remotely-tunable `$wet` threshold the script posts a webhook

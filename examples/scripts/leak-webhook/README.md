@@ -1,5 +1,7 @@
 # leak-webhook
 
+[Back to index](../README.md)
+
 A water-leak notifier: every 30 s the script reads the registered soil
 sensor's cached moisture through the `sensor <name> moisture` value token and
 posts an HTTP webhook the moment the reading crosses a remotely tunable

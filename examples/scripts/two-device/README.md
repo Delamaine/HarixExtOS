@@ -1,5 +1,7 @@
 # two-device
 
+[Back to index](../README.md)
+
 Device A publishes a sensor value to MQTT; a tiny broker-side forwarder turns that
 value into a command on device B's `shell/in`, which sets B's relay pin. This is how
 "device listens to a topic and sets a pin from the received value" is done end to
@@ -75,6 +77,11 @@ mosquitto_sub -t 'harixos/A/sensor/level' -t 'harixos/B/relay/follow/state'
 
 - Scripts cannot subscribe to arbitrary MQTT topics — inbound is `shell/in` only.
   Cross-device value flow therefore goes through a broker-side automation.
-- `mqtt pub` payloads are static text; dynamic values ride the built-in
-  sensor/relay/onchange bridges.
+  For the simple "button drives a knob on the other device" case there is no
+  forwarder needed at all: see **remote-button**, which publishes directly to
+  B's `shell/in`.
+- `mqtt pub` expands `$vars` in the topic and payload (strict mode), so a
+  script can publish dynamic JSON itself — see **bridge-status**. What it
+  still cannot do is *react* to an arbitrary inbound topic; that is what the
+  forwarder above is for.
 - Cron needs a valid system time; it syncs automatically via NTP on Wi-Fi connect.
