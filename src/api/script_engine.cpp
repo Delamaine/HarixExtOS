@@ -6,11 +6,13 @@
 #include "expr.h"
 #include "gpio_api.h"
 #include "init_gate.h"
+#include "power.h"
 #include "wifi_api.h"
 #include "system_api.h"
 #include "tz_mapping.h"
 #include "servo.h"
 #include "sensor.h"
+#include "oled.h"
 #include "motor.h"
 #include "vars.h"
 #include "../apps/settings/settings.h"
@@ -253,8 +255,8 @@ ApiResult ScriptEngine::handleRunCommand(const String &args, Stream &output) {
 }
 
 ApiResult ScriptEngine::handleScheduleCommand(const String &args, Stream &output) {
-  // schedule add <sec> <min> <hour> <dom> <month> <dow> <command>
-  // schedule remove <id> | schedule list
+  // schedule add [id=<n>] <sec> <min> <hour> <dom> <month> <dow> <command>
+  // schedule remove <id> | schedule run <id> | schedule list
   String rest = args;
   String action = takeWord(rest);
   action.toLowerCase();
@@ -262,21 +264,23 @@ ApiResult ScriptEngine::handleScheduleCommand(const String &args, Stream &output
   if (action.length() == 0 || action == "list") {
     harixos::kernel::systemScheduler.listTasks(output);
     if (action.length() == 0) {
-      output.println(F("Usage: schedule add <sec> <min> <hour> <dom> <month> <dow> <command> | schedule remove <id> | schedule list"));
+      output.println(F("Usage: schedule add [id=<n>] <sec> <min> <hour> <dom> <month> <dow> <command> | schedule remove <id> | schedule run <id> | schedule list"));
     }
     return ApiResult(API_OK, "");
   }
 
   if (action == "add") {
     if (rest.length() == 0) {
-      return ApiResult(API_INVALID_ARGUMENT, "Usage: schedule add <sec> <min> <hour> <dom> <month> <dow> <command>");
+      return ApiResult(API_INVALID_ARGUMENT, "Usage: schedule add [id=<n>] <sec> <min> <hour> <dom> <month> <dow> <command>");
     }
     char tailBuf[harixos::api::cron::kMaxSaveLine];
     rest.toCharArray(tailBuf, sizeof(tailBuf));
     char cronBuf[64];
     const char *command = nullptr;
+    int desiredId = -1;
     const char *err = harixos::api::cron::splitLine(tailBuf, cronBuf,
-                                                     sizeof(cronBuf), &command);
+                                                     sizeof(cronBuf), &command,
+                                                     &desiredId);
     int badField = -1;
     harixos::api::cron::Spec spec;
     if (err == nullptr) {
@@ -288,7 +292,12 @@ ApiResult ScriptEngine::handleScheduleCommand(const String &args, Stream &output
       }
       return ApiResult(API_INVALID_ARGUMENT, err);
     }
-    int id = harixos::kernel::systemScheduler.add(cronBuf, String(command));
+    int id = harixos::kernel::systemScheduler.add(cronBuf, String(command),
+                                                  desiredId);
+    if (id == -2) {
+      return ApiResult(API_DUPLICATE,
+                       "ID " + String(desiredId) + " already in use.");
+    }
     if (id < 0) {
       return ApiResult(API_ERROR, "Scheduler full.");
     }
@@ -309,10 +318,20 @@ ApiResult ScriptEngine::handleScheduleCommand(const String &args, Stream &output
     if (!harixos::kernel::systemScheduler.save()) {
       return ApiResult(API_OK, "Task removed, but /harixos/schedule.cfg could not be written.");
     }
-    return ApiResult(API_OK, "Task removed");
+    return ApiResult(API_OK, "Task removed.");
   }
 
-  return ApiResult(API_INVALID_ARGUMENT, "Usage: schedule add|remove|list");
+  if (action == "run") {
+    if (rest.length() == 0) {
+      return ApiResult(API_INVALID_ARGUMENT, "Usage: schedule run <id>");
+    }
+    if (harixos::kernel::systemScheduler.runTask(rest.toInt()) != 0) {
+      return ApiResult(API_ERROR, "Task not found.");
+    }
+    return ApiResult(API_OK, "");
+  }
+
+  return ApiResult(API_INVALID_ARGUMENT, "Usage: schedule add|remove|run|list");
 }
 
 // --- Widened keyword groups -------------------------------------------------
@@ -677,10 +696,14 @@ ApiResult ScriptEngine::executeCommand(const String &command, Stream &output) {
     return ServoAPI::runCommand(cmd.args, output);
   } else if (cmd.name == "sensor") {
     return SensorAPI::runCommand(cmd.args, output);
+  } else if (cmd.name == "oled") {
+    return OledAPI::runCommand(cmd.args, output);
   } else if (cmd.name == "motor") {
     return MotorAPI::runCommand(cmd.args, output);
   } else if (cmd.name == "beep") {
     return GpioAPI::beep(cmd.args, output);
+  } else if (cmd.name == "powerprofile") {
+    return handlePowerCommand(cmd.args, output);
   } else if (cmd.name.startsWith("/") || cmd.name.endsWith(".hx")) {
     // Treat as script path if it looks like one
     return handleRunCommand(command, output);
@@ -931,8 +954,9 @@ void ScriptEngine::printHelp(Stream &output) {
   output.println();
   output.println(F("Drivers:"));
   output.println(F("  servo attach|detach|write <pin> <angle>|read <pin>|list"));
-  output.println(F("  sensor register <ultrasonic <t> <e>|dht22 <pin>|ds18b20 <pin> [idx]|bme280|soil A0|ldr A0|bh1750> <name>|unregister <name>|list|read <name>|publish [name]|init <t> <e>|ping [t] [e]|read [echo]|list"));
+  output.println(F("  sensor register <ultrasonic <t> <e>|dht22 <pin>|ds18b20 <pin> [idx]|bme280|aht20|soil A0|ldr A0|bh1750> <name>|unregister <name>|list|read <name>|publish [name]|init <t> <e>|ping [t] [e]|read [echo]|list"));
   output.println(F("  motor init|forward|reverse|stop|brake|speed <0-100>|list"));
+  output.println(F("  oled init [addr]|clear|line <0-7> <text>|on|off|status  SSD1306 display"));
   output.println(F("  beep <pin> [hz] [ms]    Buzzer beep (default 1000Hz 200ms)"));
   output.println();
   output.println(F("Other:"));
@@ -942,7 +966,8 @@ void ScriptEngine::printHelp(Stream &output) {
   output.println(F("  while <cond>/end        Loop while condition is true"));
   output.println(F("  break                   Exit innermost while loop"));
   output.println(F("  init ... end            Run block once per boot, later runs skip it"));
-  output.println(F("  schedule add|remove|list [args]  Cron tasks (idempotent add)"));
+  output.println(F("  schedule add|remove|run|list [args]  Cron tasks (idempotent add)"));
+  output.println(F("  powerprofile <profile>|set <profile>|apply|status  WiFi sleep profile"));
   output.println(F("  # comment               Script comment"));
   output.println(F("  help                    Show this help"));
 }

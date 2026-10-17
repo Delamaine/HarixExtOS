@@ -4,6 +4,8 @@
 #include <string.h>
 #include <user_interface.h>
 
+#include "../apps/settings/settings.h"
+
 namespace harixos {
 namespace api {
 namespace {
@@ -13,6 +15,7 @@ const char* profileNames[] = {
   "full",
   "balanced",
   "powersave",
+  "light",
   "minimal",
   "off"
 };
@@ -33,6 +36,8 @@ PowerProfile stringToPowerProfile(const String &profile) {
     return PowerProfile::Balanced;
   } else if (profile.equalsIgnoreCase("powersave")) {
     return PowerProfile::Powersave;
+  } else if (profile.equalsIgnoreCase("light")) {
+    return PowerProfile::Light;
   } else if (profile.equalsIgnoreCase("minimal")) {
     return PowerProfile::Minimal;
   } else if (profile.equalsIgnoreCase("off")) {
@@ -47,6 +52,7 @@ String powerProfileToString(PowerProfile profile) {
     case PowerProfile::Full: return "full";
     case PowerProfile::Balanced: return "balanced";
     case PowerProfile::Powersave: return "powersave";
+    case PowerProfile::Light: return "light";
     case PowerProfile::Minimal: return "minimal";
     case PowerProfile::Off: return "off";
     default: return "balanced";
@@ -84,6 +90,13 @@ void applyPowerProfile(PowerProfile profile) {
       // Modem sleep (same as Balanced; CPU freq set separately via cpufreq cmd)
       wifi_set_sleep_type(MODEM_SLEEP_T);
       break;
+
+    case PowerProfile::Light:
+      // CPU pauses between DTIM beacons; WiFi stays associated and MQTT
+      // keeps working (incoming frames wake the chip). Do NOT use while
+      // holding servos — pulses glitch while the CPU is asleep.
+      wifi_set_sleep_type(LIGHT_SLEEP_T);
+      break;
       
     case PowerProfile::Minimal:
       // Modem sleep (CPU freq lowering to 40MHz is done by the caller)
@@ -110,11 +123,44 @@ void enterDeepSleep(uint64_t wakeTimeUs) {
   system_deep_sleep_instant(wakeTimeUs);
 }
 
-bool isSerialConnected() {
-  // Check if serial port is connected (host is listening)
-  // Using available() to detect buffered data, which is more reliable
-  // than checking DTR/RTS on ESP8266 where these signals can be unstable
-  return Serial.available() > 0;
+ApiResult handlePowerCommand(const String &args, Stream &output) {
+  String rest = args;
+  rest.trim();
+  int sep = rest.indexOf(' ');
+  String action = sep < 0 ? rest : rest.substring(0, sep);
+  String tail = sep < 0 ? String("") : rest.substring(sep + 1);
+  tail.trim();
+  action.toLowerCase();
+
+  if (action.length() == 0) {
+    return ApiResult(API_OK, "Power profile: " + shellSettings.powerProfile);
+  }
+
+  if (action == "status") {
+    output.printf("Power profile: %s\r\n", shellSettings.powerProfile.c_str());
+    output.printf("CPU Freq: %d MHz\r\n", shellSettings.cpufreq);
+    return ApiResult(API_OK, "");
+  }
+
+  if (action == "apply") {
+    applyPowerProfile(stringToPowerProfile(shellSettings.powerProfile));
+    setCpuFrequency(stringToCpuFreq(String(shellSettings.cpufreq)));
+    return ApiResult(API_OK,
+                     "Power profile applied (" + shellSettings.powerProfile + ").");
+  }
+
+  String desired = (action == "set") ? tail : action;
+  if (desired.length() == 0) {
+    return ApiResult(API_INVALID_ARGUMENT,
+                     "Usage: powerprofile <full|balanced|powersave|light|minimal|off> | set <profile> | apply | status");
+  }
+
+  PowerProfile profile = stringToPowerProfile(desired);
+  shellSettings.powerProfile = powerProfileToString(profile);
+  applyPowerProfile(profile);
+  setCpuFrequency(stringToCpuFreq(String(shellSettings.cpufreq)));
+  saveSettings(shellSettings);
+  return ApiResult(API_OK, "Power profile set to " + shellSettings.powerProfile + ".");
 }
 
 }  // namespace api

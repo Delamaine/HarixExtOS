@@ -40,6 +40,7 @@
 #include "kernel/cpu_handler/cpu_handler.h"
 #include "api/power.h"
 #include "api/sensor.h"
+#include "api/oled.h"
 #include "api/servo.h"
 #include "api/motor.h"
 #include "api/pins.h"
@@ -1819,93 +1820,17 @@ void handleSchedule(const String &line) {
   }
   rest.trim();
 
-  if (rest.length() == 0) {
-    harixos::kernel::systemScheduler.listTasks(Serial);
-    Serial.println(F("Usage: schedule add <sec> <min> <hour> <dom> <month> <dow> <command> | schedule remove <id> | schedule run <id> | schedule list"));
+  // One implementation lives in the script engine; the shell just prints
+  // what it returns, so shell and script `schedule` can never drift apart.
+  harixos::api::ApiResult result =
+      harixos::api::ScriptEngine::handleScheduleCommand(rest, Serial);
+  if (result.message.length() == 0) {
     return;
   }
-
-  int sep = rest.indexOf(' ');
-  String action = toLowerCopy(sep < 0 ? rest : rest.substring(0, sep));
-  String tail = sep < 0 ? String("") : rest.substring(sep + 1);
-  tail.trim();
-
-  if (action == F("list")) {
-    harixos::kernel::systemScheduler.listTasks(Serial);
-    return;
+  if (result.isError()) {
+    Serial.print(F("ERROR: "));
   }
-
-  if (action == F("add")) {
-    if (tail.length() == 0) {
-      Serial.println(F("Usage: schedule add <sec> <min> <hour> <dom> <month> <dow> <command>"));
-      return;
-    }
-
-    // The remainder is exactly one save line without its newline, so the
-    // save-format budget is the right cap for it.
-    char tailBuf[harixos::api::cron::kMaxSaveLine];
-    tail.toCharArray(tailBuf, sizeof(tailBuf));
-
-    char cronBuf[64];
-    const char *command = nullptr;
-    const char *err = harixos::api::cron::splitLine(tailBuf, cronBuf,
-                                                    sizeof(cronBuf), &command);
-    int badField = -1;
-    if (err == nullptr) {
-      harixos::api::cron::Spec spec;
-      err = harixos::api::cron::parse(cronBuf, spec, &badField);
-    }
-    if (err != nullptr) {
-      if (badField >= 0) Serial.printf("%s (field %d)\r\n", err, badField);
-      else Serial.println(err);
-      return;
-    }
-
-    int id = harixos::kernel::systemScheduler.add(cronBuf, String(command));
-    if (id < 0) {
-      Serial.println(F("Scheduler full."));
-      return;
-    }
-    if (!harixos::kernel::systemScheduler.save()) {
-      Serial.printf("Task %d scheduled, but /harixos/schedule.cfg could not be written.\r\n", id);
-      return;
-    }
-    Serial.printf("Task scheduled with ID %d\r\n", id);
-    return;
-  }
-
-  if (action == F("remove")) {
-    if (tail.length() == 0) {
-      Serial.println(F("Usage: schedule remove <id>"));
-      return;
-    }
-    int id = tail.toInt();
-    if (!harixos::kernel::systemScheduler.removeTask(id)) {
-      Serial.println(F("Task not found."));
-      return;
-    }
-    if (!harixos::kernel::systemScheduler.save()) {
-      Serial.println(F("Task removed, but /harixos/schedule.cfg could not be written."));
-      return;
-    }
-    Serial.println(F("Task removed."));
-    return;
-  }
-
-  if (action == F("run")) {
-    if (tail.length() == 0) {
-      Serial.println(F("Usage: schedule run <id>"));
-      return;
-    }
-    int id = tail.toInt();
-    if (harixos::kernel::systemScheduler.runTask(id) != 0) {
-      Serial.println(F("Task not found."));
-      return;
-    }
-    return;
-  }
-
-  Serial.println(F("Unknown schedule action."));
+  Serial.println(result.message);
 }
 
 // ponytail: advertised help topics are hand-maintained here. Add a new
@@ -1913,7 +1838,7 @@ void handleSchedule(const String &line) {
 // kHelpTopics, or `help <topic>` advertises a dead topic. If this list ever
 // drifts, convert handleHelp's if/else chain to a table keyed on kHelpTopics.
 static const char* const kHelpTopics =
-    "wifi|gpio|i2c|fs|serve|post|mqtt|onchange|relay|time|schedule|update|sensor|servo|motor|beep|run|calc|set|vars|settings|powerprofile|cpufreq";
+    "wifi|gpio|i2c|fs|serve|post|mqtt|onchange|relay|time|schedule|update|sensor|oled|servo|motor|beep|run|calc|set|vars|settings|powerprofile|cpufreq";
 
 void handleHelp(const TokenizedLine &cmd) {
   if (cmd.count == 1) {
@@ -1961,9 +1886,10 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  settings update on|off  Toggle auto-update check"));
     Serial.println(F("  settings save        Save settings to flash"));
     Serial.println(F("  settings reload      Reload settings from flash"));
-    Serial.println(F("  powerprofile ...     Manage power profile (powerprofile [full|balanced|powersave|minimal|off] | set <profile> | apply | status)"));
+    Serial.println(F("  powerprofile ...     Manage power profile (powerprofile [full|balanced|powersave|light|minimal|off] | set <profile> | apply | status)"));
     Serial.println(F("  cpufreq ...          Manage CPU frequency (cpufreq [40|80] | set <freq> | status)"));
-    Serial.println(F("  sensor ...           Sensors: register/list/read/publish (HC-SR04, DHT22, DS18B20, BME280); legacy init/ping/read/list"));
+    Serial.println(F("  sensor ...           Sensors: register/list/read/publish (HC-SR04, DHT22, DS18B20, BME280, AHT20); legacy init/ping/read/list"));
+    Serial.println(F("  oled ...             SSD1306 128x64 display (oled init [addr]|clear|line <0-7> <text>|on|off|status)"));
     Serial.println(F("  servo ...            SG90 servo motor (servo attach|detach|write|read|list)"));
     Serial.println(F("  motor ...            L293D motor shield (motor init|forward|reverse|stop|brake|speed|list)"));
     Serial.println(F("  beep <pin> [hz] [ms] Buzzer beep (tone; default 1000Hz 200ms)"));
@@ -2043,7 +1969,7 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  schedule list                     List all tasks"));
     Serial.println(F("  schedule remove <id>              Remove task by ID"));
     Serial.println(F("  schedule run <id>                 Run a task now, ignoring its schedule"));
-    Serial.println(F("  schedule add <6 fields> <command> Add a task"));
+    Serial.println(F("  schedule add [id=<n>] <6 fields> <command> Add a task"));
     Serial.println();
     Serial.println(F("Fields: 0-59 sec, 0-59 min, 0-23 hour, 1-31 dom,"));
     Serial.println(F("        1-12 month, 0-6 dow (0 = Sunday)"));
@@ -2088,6 +2014,15 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  servo list               List all attached servos"));
     Serial.println();
     Serial.println(F("Uses ESP8266 native PWM (ledc). Auto-attaches on write if not attached."));
+  } else if (topic == F("oled")) {
+    Serial.println(F("SSD1306 OLED commands (I2C, 128x64, default addr 0x3C):"));
+    Serial.println(F("  oled init [addr]       Init display (addr decimal, default 60 = 0x3C)"));
+    Serial.println(F("  oled clear             Blank the whole screen"));
+    Serial.println(F("  oled line <0-7> <text> Write one of 8 text lines (21 chars, ASCII)"));
+    Serial.println(F("  oled on|off            Display power"));
+    Serial.println(F("  oled status            Initialization state"));
+    Serial.println();
+    Serial.println(F("Lines keep their content until rewritten; plain const text only."));
   } else if (topic == F("mqtt")) {
     Serial.println(F("MQTT commands (IoT / Home Assistant):"));
     Serial.println(F("  mqtt status              Show connection, config, counters"));
@@ -2173,9 +2108,10 @@ void handleHelp(const TokenizedLine &cmd) {
   } else if (topic == F("powerprofile")) {
     Serial.println(F("Power profile management:"));
     Serial.println(F("  powerprofile           Show current profile"));
-    Serial.println(F("  powerprofile <profile> Set profile (full|balanced|powersave|minimal|off)"));
+    Serial.println(F("  powerprofile <profile> Set profile (full|balanced|powersave|light|minimal|off)"));
     Serial.println(F("  powerprofile apply     Re-apply saved profile"));
     Serial.println(F("  powerprofile status    Show profile and CPU frequency"));
+    Serial.println(F("  Console preempts `light` with `full`; restores 60 s after last input"));
   } else if (topic == F("cpufreq")) {
     Serial.println(F("CPU frequency management:"));
     Serial.println(F("  cpufreq                Show current frequency"));
@@ -2192,6 +2128,7 @@ void handleCpuFreq(const String &line);
 void handleSensor(const String &line);
 void handleServo(const String &line);
 void handleMotor(const String &line);
+void handleOled(const String &line);
 void handleVars(const String &line);
 
 void executeCommand(const String &line) {
@@ -2289,6 +2226,9 @@ void executeCommand(const String &line) {
   } else if (command == F("sensor")) {
     String tail = line.substring(6);
     handleSensor(tail);
+  } else if (command == F("oled")) {
+    String tail = line.substring(4);
+    handleOled(tail);
   } else if (command == F("servo")) {
     String tail = line.substring(5);
     handleServo(tail);
@@ -2401,49 +2341,21 @@ void handleFs(const TokenizedLine &cmd) {
 void handlePowerProfile(const String &line) {
   String rest = line;
   rest.trim();
-  if (rest.equalsIgnoreCase("powerprofile")) {
-    rest = "";
-  } else if (rest.startsWith("powerprofile")) {
+  if (rest.length() >= 12 && rest.substring(0, 12).equalsIgnoreCase("powerprofile")) {
     rest = rest.substring(12);
-    rest.trim();
   }
-  if (rest.length() == 0) {
-    Serial.printf("Power profile: %s\r\nUsage: powerprofile <full|balanced|powersave|minimal|off>\r\n", shellSettings.powerProfile.c_str());
+  rest.trim();
+
+  // One implementation lives in api/power.cpp; the shell just prints what
+  // it returns, so shell and script `powerprofile` can never drift.
+  harixos::api::ApiResult result = harixos::api::handlePowerCommand(rest, Serial);
+  if (result.message.length() == 0) {
     return;
   }
-
-  int sep = rest.indexOf(' ');
-  String action = sep < 0 ? rest : rest.substring(0, sep);
-  String tail = sep < 0 ? String("") : rest.substring(sep + 1);
-  tail.trim();
-
-  if (action.equalsIgnoreCase("set") || action.equalsIgnoreCase("")) {
-    if (tail.length() == 0) {
-      Serial.printf("Current profile: %s\r\nUsage: powerprofile set <full|balanced|powersave|minimal|off>\r\n", shellSettings.powerProfile.c_str());
-      return;
-    }
-    harixos::api::PowerProfile profile = harixos::api::stringToPowerProfile(tail);
-    shellSettings.powerProfile = harixos::api::powerProfileToString(profile);
-    harixos::api::applyPowerProfile(profile);
-    harixos::api::setCpuFrequency(harixos::api::stringToCpuFreq(String(shellSettings.cpufreq)));
-    harixos::saveSettings(shellSettings);
-    Serial.printf("Power profile set to %s.\r\n", shellSettings.powerProfile.c_str());
-  } else if (action.equalsIgnoreCase("apply")) {
-    harixos::api::PowerProfile profile = harixos::api::stringToPowerProfile(shellSettings.powerProfile);
-    harixos::api::applyPowerProfile(profile);
-    harixos::api::setCpuFrequency(harixos::api::stringToCpuFreq(String(shellSettings.cpufreq)));
-    Serial.printf("Power profile applied (%s).\r\n", shellSettings.powerProfile.c_str());
-  } else if (action.equalsIgnoreCase("status")) {
-    Serial.printf("Power profile: %s\r\n", shellSettings.powerProfile.c_str());
-    Serial.printf("CPU Freq: %d MHz\r\n", shellSettings.cpufreq);
-  } else {
-    harixos::api::PowerProfile profile = harixos::api::stringToPowerProfile(action);
-    shellSettings.powerProfile = harixos::api::powerProfileToString(profile);
-    harixos::api::applyPowerProfile(profile);
-    harixos::api::setCpuFrequency(harixos::api::stringToCpuFreq(String(shellSettings.cpufreq)));
-    harixos::saveSettings(shellSettings);
-    Serial.printf("Power profile set to %s.\r\n", shellSettings.powerProfile.c_str());
+  if (result.isError()) {
+    Serial.print(F("ERROR: "));
   }
+  Serial.println(result.message);
 }
 
 void handleCpuFreq(const String &line) {
@@ -2501,6 +2413,14 @@ void handleSensor(const String &line) {
 
 void handleServo(const String &line) {
   harixos::api::ApiResult result = harixos::api::ServoAPI::runCommand(line, Serial);
+  if (result.isError()) {
+    Serial.print(F("ERROR: "));
+    Serial.println(result.message);
+  }
+}
+
+void handleOled(const String &line) {
+  harixos::api::ApiResult result = harixos::api::OledAPI::runCommand(line, Serial);
   if (result.isError()) {
     Serial.print(F("ERROR: "));
     Serial.println(result.message);
@@ -2668,38 +2588,31 @@ void loop() {
   harixos::kernel::systemScheduler.update();
   harixos::iot::update();
   harixos::iot::updateOnchange();
-  
-  // Auto-switch to lower power when no serial session is connected
-  // Only switch if terminal has been idle for more than 1 minute
-  static bool lastSerialState = true;
-  static unsigned long lastStateChange = 0;
-  const unsigned long idleTimeoutMs = 60000UL;  // 1 minute
-  
-  bool currentSerialState = harixos::api::isSerialConnected();
-  
-  if (currentSerialState != lastSerialState) {
-    lastStateChange = millis();
-    lastSerialState = currentSerialState;
-  } else if ((millis() - lastStateChange >= idleTimeoutMs)) {
-    // Terminal has been stable for more than 1 minute - execute the pending switch
-    if (!currentSerialState) {
-      // Terminal idle - switch to powersave if on balanced/full
-      if (shellSettings.powerProfile.equalsIgnoreCase("balanced") || shellSettings.powerProfile.equalsIgnoreCase("full")) {
-        harixos::api::PowerProfile psProfile = harixos::api::stringToPowerProfile("powersave");
-        harixos::api::applyPowerProfile(psProfile);
-        Serial.println(F("Terminal idle for 1 minute. Switched to powersave."));
+
+  // A live serial console preempts the `light` profile: any received byte
+  // applies `full` live-only (shellSettings keeps the stored profile), and
+  // 60 s of quiet restores it. Detection is RX activity because NodeMCU's
+  // DTR/RTS are wired to auto-reset, not readable by the ESP.
+  static unsigned long lastConsoleActivity = 0;
+  static bool consolePreempted = false;
+  if (Serial.available()) {
+    lastConsoleActivity = millis();
+    if (shellSettings.powerProfile.equalsIgnoreCase("light")) {
+      if (!consolePreempted) {
+        consolePreempted = true;
+        Serial.println(F("Console active: preempting light with full."));
       }
+      harixos::api::applyPowerProfile(harixos::api::PowerProfile::Full);
     } else {
-      // Terminal active for 1 minute - restore saved profile
-      harixos::api::PowerProfile restoredProfile = harixos::api::stringToPowerProfile(shellSettings.powerProfile);
-      harixos::api::applyPowerProfile(restoredProfile);
-      harixos::api::setCpuFrequency(harixos::api::stringToCpuFreq(String(shellSettings.cpufreq)));
-      Serial.printf("Terminal active for 1 minute. Restored profile: %s.\r\n", shellSettings.powerProfile.c_str());
+      consolePreempted = false;
     }
-    // Reset to prevent repeated switches
-    lastStateChange = millis();
+  } else if (consolePreempted &&
+             (millis() - lastConsoleActivity >= 60000UL)) {
+    consolePreempted = false;
+    harixos::api::applyPowerProfile(harixos::api::PowerProfile::Light);
+    Serial.println(F("Console idle 60 s: profile back to light."));
   }
-  
+
   // Use safe yield to process background tasks and feed WDT
   harixos::kernel::CpuHandler::yieldSafely();
 }

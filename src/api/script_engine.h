@@ -34,7 +34,11 @@ public:
   
   // List available script commands
   static void printHelp(Stream &output = Serial);
-  
+
+  // Shared schedule handler — the shell delegates here too (main.cpp
+  // handleSchedule), so `schedule` parses identically in both worlds.
+  static ApiResult handleScheduleCommand(const String &args, Stream &output);
+
 private:
   // Parse and execute individual commands
   static ApiResult handleGpioCommand(const String &args, Stream &output);
@@ -44,7 +48,6 @@ private:
   static ApiResult handlePrintCommand(const String &args, Stream &output);
   static ApiResult handleSetCommand(const String &args, Stream &output);
   static ApiResult handleRunCommand(const String &args, Stream &output);
-  static ApiResult handleScheduleCommand(const String &args, Stream &output);
 
   // Keyword groups widened so `schedule add` can run real commands. Each
   // delegates to the API or filesystem layer; none reimplements a shell

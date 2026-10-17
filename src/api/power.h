@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+#include "api_types.h"
+
 namespace harixos {
 namespace api {
 
@@ -9,6 +11,7 @@ enum class PowerProfile {
   Full,
   Balanced,
   Powersave,
+  Light,
   Minimal,
   Off
 };
@@ -27,7 +30,10 @@ String cpuFreqToString(CpuFreq freq);
 void applyPowerProfile(PowerProfile profile);
 bool setCpuFrequency(CpuFreq freq);
 void enterDeepSleep(uint64_t wakeTimeUs);
-bool isSerialConnected();
+
+// Shared powerprofile handler — the shell delegates here too (main.cpp
+// handlePowerProfile), and scripts can call it directly.
+ApiResult handlePowerCommand(const String &args, Stream &output);
 
 }  // namespace api
 }  // namespace harixos
