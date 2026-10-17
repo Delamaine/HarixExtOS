@@ -216,6 +216,50 @@ static void test_discovery_payload_ldr_no_class(void) {
       out);
 }
 
+static void test_parse_type_aht20(void) {
+  uint8_t t = 0xFF;
+  TEST_ASSERT_TRUE(sensorParseType("aht20", &t));
+  TEST_ASSERT_EQUAL_UINT(kSensorAht20, t);
+  TEST_ASSERT_EQUAL_STRING("aht20", sensorTypeName(kSensorAht20));
+}
+
+static void test_aht20_quantities_and_no_pin_line(void) {
+  TEST_ASSERT_TRUE(sensorHasQuantity(kSensorAht20, kQtyTemperature));
+  TEST_ASSERT_TRUE(sensorHasQuantity(kSensorAht20, kQtyHumidity));
+  TEST_ASSERT_FALSE(sensorHasQuantity(kSensorAht20, kQtyPressure));
+  SensorDef out = {};
+  TEST_ASSERT_TRUE(sensorParseLine("desk|aht20|0|0", &out));
+  TEST_ASSERT_EQUAL_UINT(kSensorAht20, out.type);
+  char line[64];
+  sensorPersistLine(out, line, sizeof(line));
+  TEST_ASSERT_EQUAL_STRING("desk|aht20|0|0", line);
+  TEST_ASSERT_FALSE(sensorParseLine("desk|aht20|4|0", &out));
+}
+
+static void test_aht_crc8(void) {
+  const uint8_t zeros[5] = {0, 0, 0, 0, 0};
+  TEST_ASSERT_EQUAL_HEX8(0x93, ahtCrc8(zeros, 5));
+  const uint8_t d5[5] = {0x71, 0xAD, 0x00, 0x04, 0x00};
+  TEST_ASSERT_EQUAL_HEX8(0x8E, ahtCrc8(d5, 5));
+  const uint8_t frame[6] = {0x18, 0x71, 0xAD, 0x00, 0x04, 0x00};
+  TEST_ASSERT_EQUAL_HEX8(0x28, ahtCrc8(frame, 6));
+}
+
+static void test_aht_decode(void) {
+  // Known-good frame: status ready+calibrated, RH 44.4046%, T -49.8047 C.
+  const uint8_t good[7] = {0x18, 0x71, 0xAD, 0x00, 0x04, 0x00, 0x28};
+  float t = 1234.0f, h = 1234.0f;
+  TEST_ASSERT_TRUE(ahtDecodeFrame(good, &t, &h));
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, -49.8047f, t);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 44.4046f, h);
+  // Busy status with a self-consistent CRC must still be rejected.
+  const uint8_t busy[7] = {0x98, 0x71, 0xAD, 0x00, 0x04, 0x00, 0xC4};
+  TEST_ASSERT_FALSE(ahtDecodeFrame(busy, &t, &h));
+  // Valid data, single-bit corruption in the CRC byte.
+  const uint8_t badCrc[7] = {0x18, 0x71, 0xAD, 0x00, 0x04, 0x00, 0x29};
+  TEST_ASSERT_FALSE(ahtDecodeFrame(badCrc, &t, &h));
+}
+
 int main(int argc, char **argv) {
   UNITY_BEGIN();
   RUN_TEST(test_valid_name);
@@ -231,5 +275,9 @@ int main(int argc, char **argv) {
   RUN_TEST(test_discovery_payload_field_exact);
   RUN_TEST(test_discovery_payload_bme_pressure);
   RUN_TEST(test_discovery_payload_ultrasonic_distance);
+  RUN_TEST(test_parse_type_aht20);
+  RUN_TEST(test_aht20_quantities_and_no_pin_line);
+  RUN_TEST(test_aht_crc8);
+  RUN_TEST(test_aht_decode);
   return UNITY_END();
 }

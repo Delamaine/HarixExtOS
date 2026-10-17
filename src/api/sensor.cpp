@@ -286,6 +286,80 @@ static bool readBh1750(SensorDef& d) {
   return true;
 }
 
+// ===== AHT20 over I2C (hand-rolled, no lib) =====
+// Datasheet §7.4: status via 0x71; at power-on send init 0xBE 0x08 0x00 when
+// the calibration bit is clear; trigger 0xAC 0x33 0x00, wait 80 ms, poll
+// status until bit7 clears, then read 7 bytes (status + 5 data + CRC8).
+
+static bool s_ahtInited = false;  // calibration init runs once per boot
+
+static bool ahtStatus(uint8_t* out) {
+  Wire.beginTransmission(0x38);
+  Wire.write(0x71);
+  if (Wire.endTransmission() != 0) return false;
+  if (Wire.requestFrom((uint8_t)0x38, (uint8_t)1) < 1) return false;
+  *out = (uint8_t)Wire.read();
+  return true;
+}
+
+static bool readAht20(SensorDef& d) {
+  uint8_t st;
+  if (!ahtStatus(&st)) {
+    s_lastReadError = "no AHT20 on I2C";
+    return false;
+  }
+  if (!s_ahtInited) {
+    if (!(st & 0x08)) {  // calibration bit clear -> init
+      Wire.beginTransmission(0x38);
+      Wire.write(0xBE);
+      Wire.write(0x08);
+      Wire.write(0x00);
+      if (Wire.endTransmission() != 0) {
+        s_lastReadError = "AHT20 init failed";
+        return false;
+      }
+      delay(10);
+    }
+    s_ahtInited = true;
+  }
+  Wire.beginTransmission(0x38);
+  Wire.write(0xAC);
+  Wire.write(0x33);
+  Wire.write(0x00);
+  if (Wire.endTransmission() != 0) {
+    s_lastReadError = "AHT20 trigger failed";
+    return false;
+  }
+  delay(80);
+  bool ready = false;  // bounded poll, ~100 ms past the datasheet's 80 ms
+  for (int i = 0; i < 21 && !ready; ++i) {
+    if (!ahtStatus(&st)) {
+      s_lastReadError = "AHT20 read failed";
+      return false;
+    }
+    if (!(st & 0x80)) ready = true;
+    else delay(5);
+  }
+  if (!ready) {
+    s_lastReadError = "AHT20 busy timeout";
+    return false;
+  }
+  if (Wire.requestFrom((uint8_t)0x38, (uint8_t)7) < 7) {
+    s_lastReadError = "AHT20 read failed";
+    return false;
+  }
+  uint8_t frame[7];
+  for (uint8_t i = 0; i < 7; ++i) frame[i] = (uint8_t)Wire.read();
+  float t, h;
+  if (!ahtDecodeFrame(frame, &t, &h)) {
+    s_lastReadError = "AHT20 decode failed";
+    return false;
+  }
+  sensorSetReading(d, kQtyTemperature, t);
+  sensorSetReading(d, kQtyHumidity, h);
+  return true;
+}
+
 static bool readSensor(int idx) {
   s_lastReadError = nullptr;
   SensorDef& d = s_pool[idx];
@@ -297,6 +371,7 @@ static bool readSensor(int idx) {
     case kSensorSoil: return readAnalog(d, kQtyMoisture);
     case kSensorLdr: return readAnalog(d, kQtyIlluminance);
     case kSensorBh1750: return readBh1750(d);
+    case kSensorAht20: return readAht20(d);
     default: return false;
   }
 }
@@ -328,9 +403,9 @@ static ApiResult registerSensor(uint8_t type, uint8_t a, uint8_t b,
   }
   // Pin rules mirror sensorParseLine so a persisted line is never accepted at
   // load and rejected at register (or vice versa): pinned types need a nonzero
-  // GPIO, ultrasonic needs a real echo pin, bme280/bh1750 take no pins at all,
-  // soil/ldr use A0 (17) only.
-  if (type == kSensorBme280 || type == kSensorBh1750) {
+  // GPIO, ultrasonic needs a real echo pin, bme280/bh1750/aht20 take no pins
+  // at all, soil/ldr use A0 (17) only.
+  if (type == kSensorBme280 || type == kSensorBh1750 || type == kSensorAht20) {
     if (a != 0 || b != 0) {
       return ApiResult(API_INVALID_ARGUMENT, String(sensorTypeName(type)) + " takes no pins");
     }
@@ -356,7 +431,7 @@ static ApiResult registerSensor(uint8_t type, uint8_t a, uint8_t b,
   if (pinsConflict(type, a, b)) {
     return ApiResult(API_DUPLICATE, "sensor already registered for those pins");
   }
-  if (type == kSensorBme280 || type == kSensorBh1750) {
+  if (type == kSensorBme280 || type == kSensorBh1750 || type == kSensorAht20) {
     for (int i = 0; i < SensorAPI::kMaxSensors; ++i) {
       if (s_inited[i] && s_pool[i].type == type) {
         return ApiResult(API_DUPLICATE, String(sensorTypeName(type)) + " already registered");
@@ -544,7 +619,7 @@ static ApiResult doRegister(const String& tail, Stream& out) {
   int sp = tail.indexOf(' ');
   if (sp < 0) {
     return ApiResult(API_INVALID_ARGUMENT,
-                     "Usage: sensor register <ultrasonic <t> <e>|dht22 <pin>|ds18b20 <pin> [index]|bme280|soil A0|ldr A0|bh1750> <name>");
+                     "Usage: sensor register <ultrasonic <t> <e>|dht22 <pin>|ds18b20 <pin> [index]|bme280|aht20|soil A0|ldr A0|bh1750> <name>");
   }
   String typeStr = tail.substring(0, sp);
   typeStr.trim();
@@ -555,7 +630,7 @@ static ApiResult doRegister(const String& tail, Stream& out) {
   uint8_t type;
   if (!sensorParseType(typeStr.c_str(), &type)) {
     return ApiResult(API_INVALID_ARGUMENT,
-                     "Usage: sensor register <ultrasonic <t> <e>|dht22 <pin>|ds18b20 <pin> [index]|bme280|soil A0|ldr A0|bh1750> <name>");
+                     "Usage: sensor register <ultrasonic <t> <e>|dht22 <pin>|ds18b20 <pin> [index]|bme280|aht20|soil A0|ldr A0|bh1750> <name>");
   }
 
   uint8_t a = 0;
@@ -621,7 +696,7 @@ static ApiResult doRegister(const String& tail, Stream& out) {
     }
     a = 17;  // A0: the only analog-capable pin on ESP8266
     nameStr = rest.substring(sp1 + 1);
-  } else {  // bme280 / bh1750: no pins
+  } else {  // bme280 / bh1750 / aht20: no pins
     nameStr = rest;
   }
   nameStr.trim();

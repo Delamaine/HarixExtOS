@@ -20,6 +20,7 @@ enum SensorType : uint8_t {
   kSensorSoil,
   kSensorLdr,
   kSensorBh1750,
+  kSensorAht20,
   kSensorTypeCount
 };
 
@@ -40,6 +41,7 @@ enum SensorQty : uint8_t {
 //   bme280:     no pins (I2C address probed at read time)
 //   soil/ldr:   a = 17 (A0, the only analog-capable pin)
 //   bh1750:     no pins (I2C 0x23)
+//   aht20:      no pins (I2C 0x38)
 struct SensorDef {
   char name[16];  // NUL-terminated, 1-15 chars [A-Za-z0-9_-]
   uint8_t type;   // SensorType value
@@ -98,6 +100,15 @@ void sensorPersistLine(const SensorDef& d, char* out, size_t n);
 // Parse a persisted line back into `out`. False on empty line, wrong field
 // count, invalid name, unknown type, or a pin value that contradicts the type.
 bool sensorParseLine(const char* line, SensorDef* out);
+
+// AHT20 CRC-8: poly 0x31, init 0xFF, no xorout, no reflection (datasheet
+// §5.4.4). Covers the status byte plus the 5 data bytes.
+uint8_t ahtCrc8(const uint8_t* data, size_t n);
+
+// Decode one 7-byte AHT20 measurement frame (status, 5 data, CRC). False on
+// busy status or CRC mismatch; otherwise RH = raw20*100/2^20 %,
+// T = raw20*200/2^20 - 50 °C.
+bool ahtDecodeFrame(const uint8_t frame[7], float* temperature, float* humidity);
 
 // Build the HA sensor config payload (no JSON lib, String-free).
 // hp  = sanitized prefix (haPrefix()); prefix = raw mqttPrefix

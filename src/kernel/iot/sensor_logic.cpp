@@ -30,7 +30,7 @@ bool sensorValidName(const char* s) {
 
 bool sensorParseType(const char* s, uint8_t* out) {
   static const char* kNames[kSensorTypeCount] = {
-      "ultrasonic", "dht22", "ds18b20", "bme280", "soil", "ldr", "bh1750"};
+      "ultrasonic", "dht22", "ds18b20", "bme280", "soil", "ldr", "bh1750", "aht20"};
   for (uint8_t i = 0; i < kSensorTypeCount; ++i) {
     if (strcmp(s, kNames[i]) == 0) {
       *out = i;
@@ -42,7 +42,7 @@ bool sensorParseType(const char* s, uint8_t* out) {
 
 const char* sensorTypeName(uint8_t type) {
   static const char* kNames[kSensorTypeCount] = {
-      "ultrasonic", "dht22", "ds18b20", "bme280", "soil", "ldr", "bh1750"};
+      "ultrasonic", "dht22", "ds18b20", "bme280", "soil", "ldr", "bh1750", "aht20"};
   return type < kSensorTypeCount ? kNames[type] : "";
 }
 
@@ -83,6 +83,7 @@ bool sensorHasQuantity(uint8_t type, uint8_t qty) {
     case kSensorSoil:     return qty == kQtyMoisture;
     case kSensorLdr:      return qty == kQtyIlluminance;
     case kSensorBh1750:   return qty == kQtyIlluminance;
+    case kSensorAht20:    return qty == kQtyTemperature || qty == kQtyHumidity;
     default: return false;
   }
 }
@@ -179,7 +180,8 @@ bool sensorParseLine(const char* line, SensorDef* out) {
   // all, soil/ldr use A0 (17) only.
   switch (type) {
     case kSensorBme280:
-    case kSensorBh1750: if (a != 0 || b != 0) return false; break;
+    case kSensorBh1750:
+    case kSensorAht20: if (a != 0 || b != 0) return false; break;
     case kSensorUltrasonic: if (a == 0 || b == 0) return false; break;
     case kSensorSoil:
     case kSensorLdr: if (a != 17) return false; break;
@@ -197,6 +199,29 @@ bool sensorParseLine(const char* line, SensorDef* out) {
   out->distance = NAN;
   out->moisture = NAN;
   out->illuminance = NAN;
+  return true;
+}
+
+uint8_t ahtCrc8(const uint8_t* data, size_t n) {
+  uint8_t crc = 0xFF;
+  for (size_t i = 0; i < n; ++i) {
+    crc ^= data[i];
+    for (int b = 0; b < 8; ++b) {
+      crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x31) : (uint8_t)(crc << 1);
+    }
+  }
+  return crc;
+}
+
+bool ahtDecodeFrame(const uint8_t frame[7], float* temperature, float* humidity) {
+  if (ahtCrc8(frame, 6) != frame[6]) return false;
+  if (frame[0] & 0x80) return false;  // still measuring
+  uint32_t rawHum = ((uint32_t)frame[1] << 12) | ((uint32_t)frame[2] << 4) |
+                    ((uint32_t)frame[3] >> 4);
+  uint32_t rawTemp = (((uint32_t)frame[3] & 0x0F) << 16) |
+                     ((uint32_t)frame[4] << 8) | (uint32_t)frame[5];
+  *humidity = (float)rawHum * 100.0f / 1048576.0f;
+  *temperature = (float)rawTemp * 200.0f / 1048576.0f - 50.0f;
   return true;
 }
 
