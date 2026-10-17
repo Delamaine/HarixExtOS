@@ -38,24 +38,30 @@ const char *parse(const char *expression, Spec &out, int *badField);
 // but when both fields are restricted both must hold.
 bool matches(const Spec &spec, const struct tm &timeinfo);
 
-// Budget for one persisted "<expression> <command>\n" line. scheduler.cpp
+// Budget for one persisted "[id=<n> ]<expression> <command>\n" line — 192
+// for the original format plus 16 for the optional id prefix. scheduler.cpp
 // cannot see main.cpp's anonymous-namespace line limit, so the save-format
 // budget lives with the module that defines the format.
-constexpr size_t kMaxSaveLine = 192;
+constexpr size_t kMaxSaveLine = 208;
 
-// Splits "<6 cron fields> <command...>" into its two halves.
+// Splits "[id=<n> ]<6 cron fields> <command...>" into its parts.
 // cronOut receives the first six whitespace-separated fields, normalised to
 // single spaces. *commandOut points into `line` at the text after field 6,
 // so the caller must keep `line` alive for as long as it uses the command.
-// Returns nullptr on success, else "expected 6 fields" / "missing command".
+// idOut (optional) receives the explicit task id, or -1 when the line has
+// no id= prefix. "id=" can never be a valid cron field, so the prefix is
+// unambiguous at position 0.
+// Returns nullptr on success, else "expected 6 fields" / "missing command" /
+// "invalid id (expected id=<n>)".
 const char *splitLine(const char *line, char *cronOut, size_t cronCap,
-                      const char **commandOut);
+                      const char **commandOut, int *idOut = nullptr);
 
 // The exact inverse, so the line format has one definition. Writes
-// "<expression> <command>" plus a trailing '\n' as load() expects.
+// "[id=<n> ]<expression> <command>" plus a trailing '\n' as load() expects;
+// id <= 0 omits the prefix.
 // Returns nullptr, or "line too long" if it would not fit in cap.
 const char *makeLine(const char *expression, const char *command, char *out,
-                     size_t cap);
+                     size_t cap, int id = -1);
 
 }  // namespace cron
 }  // namespace api

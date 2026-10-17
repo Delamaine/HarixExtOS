@@ -339,6 +339,62 @@ static void test_split_line_extra_internal_whitespace(void) {
   TEST_ASSERT_EQUAL_STRING("heap", command);
 }
 
+// The id= prefix is what lets `schedule add id=<n>` survive a reboot:
+// save() writes it, load() reads it back.
+static void test_split_line_reads_id_prefix(void) {
+  char cron[64];
+  const char *command = nullptr;
+  int id = 0;
+  TEST_ASSERT_NULL(splitLine("id=7 0 30 14 * * * settings save now", cron,
+                             sizeof(cron), &command, &id));
+  TEST_ASSERT_EQUAL_INT(7, id);
+  TEST_ASSERT_EQUAL_STRING("0 30 14 * * *", cron);
+  TEST_ASSERT_EQUAL_STRING("settings save now", command);
+}
+
+static void test_split_line_without_id_prefix(void) {
+  char cron[64];
+  const char *command = nullptr;
+  int id = 0;
+  TEST_ASSERT_NULL(splitLine("*/5 * * * * * reboot", cron, sizeof(cron),
+                             &command, &id));
+  TEST_ASSERT_EQUAL_INT(-1, id);
+  TEST_ASSERT_EQUAL_STRING("*/5 * * * * *", cron);
+  TEST_ASSERT_EQUAL_STRING("reboot", command);
+}
+
+static void test_split_line_rejects_bad_id(void) {
+  char cron[64];
+  const char *command = nullptr;
+  int id = 0;
+  const char *err =
+      splitLine("id=abc 0 0 8 * * * reboot", cron, sizeof(cron), &command, &id);
+  TEST_ASSERT_NOT_NULL(err);
+  TEST_ASSERT_EQUAL_STRING("invalid id (expected id=<n>)", err);
+  // id 0 is not a valid task id (ids start at 1), and a digit run that is
+  // not terminated by whitespace would eat the cron fields.
+  TEST_ASSERT_NOT_NULL(splitLine("id=0 0 0 8 * * * reboot", cron, sizeof(cron),
+                                 &command, &id));
+  TEST_ASSERT_NOT_NULL(splitLine("id=7x 0 0 8 * * * reboot", cron, sizeof(cron),
+                                 &command, &id));
+}
+
+static void test_make_line_round_trips_id(void) {
+  char saved[kMaxSaveLine];
+  TEST_ASSERT_NULL(makeLine("*/5 * * * * *", "settings save now", saved,
+                            sizeof(saved), 7));
+  TEST_ASSERT_EQUAL_STRING("id=7 */5 * * * * * settings save now\n", saved);
+
+  saved[strlen(saved) - 1] = '\0';
+  char cron[64];
+  const char *command = nullptr;
+  int id = 0;
+  TEST_ASSERT_NULL(splitLine(saved, cron, sizeof(cron), &command, &id));
+  TEST_ASSERT_EQUAL_INT(7, id);
+  TEST_ASSERT_EQUAL_STRING("*/5 * * * * *", cron);
+  TEST_ASSERT_EQUAL_STRING("settings save now", command);
+}
+
 // spec 9.1 round trip - the exact seam a reboot crosses.
 static void test_make_line_round_trips(void) {
   char saved[kMaxSaveLine];
@@ -443,6 +499,10 @@ int main(int argc, char **argv) {
   RUN_TEST(test_split_line_five_fields);
   RUN_TEST(test_split_line_extra_internal_whitespace);
   RUN_TEST(test_make_line_round_trips);
+  RUN_TEST(test_split_line_reads_id_prefix);
+  RUN_TEST(test_split_line_without_id_prefix);
+  RUN_TEST(test_split_line_rejects_bad_id);
+  RUN_TEST(test_make_line_round_trips_id);
   RUN_TEST(test_parse_boundary_lowest);
   RUN_TEST(test_parse_boundary_highest);
   return UNITY_END();

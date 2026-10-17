@@ -15,7 +15,8 @@ Scheduler systemScheduler;
 
 Scheduler::Scheduler() : taskCount(0), nextId(1), lastExecutedSecond(-1), lastExecutedMinute(-1), lastExecutedHour(-1), timeWarningPrinted(false) {}
 
-int Scheduler::add(const char *expression, const String &command) {
+int Scheduler::add(const char *expression, const String &command,
+                   int desiredId) {
   if (expression == nullptr || taskCount >= MAX_TASKS) {
     return -1;
   }
@@ -31,12 +32,22 @@ int Scheduler::add(const char *expression, const String &command) {
     }
   }
 
-  tasks[taskCount].id = nextId++;
+  int id = desiredId;
+  if (desiredId > 0) {
+    for (int i = 0; i < taskCount; ++i) {
+      if (tasks[i].id == desiredId) return -2;  // taken by a different task
+    }
+    if (id >= nextId) nextId = id + 1;
+  } else {
+    id = nextId++;
+  }
+
+  tasks[taskCount].id = id;
   tasks[taskCount].spec = spec;
   tasks[taskCount].expression = expression;
   tasks[taskCount].command = command;
   taskCount++;
-  return tasks[taskCount - 1].id;
+  return id;
 }
 
 bool Scheduler::removeTask(int id) {
@@ -135,7 +146,7 @@ bool Scheduler::save() {
   for (int i = 0; i < taskCount; ++i) {
     if (api::cron::makeLine(tasks[i].expression.c_str(),
                             tasks[i].command.c_str(), scratch,
-                            sizeof(scratch)) != nullptr) {
+                            sizeof(scratch), tasks[i].id) != nullptr) {
       return false;
     }
     content += scratch;
@@ -178,8 +189,10 @@ bool Scheduler::load() {
 
     char cronBuf[64];
     const char *command = nullptr;
+    int parsedId = -1;
     const char *err =
-        api::cron::splitLine(lineBuf, cronBuf, sizeof(cronBuf), &command);
+        api::cron::splitLine(lineBuf, cronBuf, sizeof(cronBuf), &command,
+                             &parsedId);
 
     api::cron::Spec spec;
     if (err == nullptr) {
@@ -199,16 +212,38 @@ bool Scheduler::load() {
       break;
     }
 
-    tasks[taskCount].id = nextId++;
+    // An id= prefix keeps its id across a reboot. A legacy line without one,
+    // or a hand-edited duplicate, falls back to the next sequential id —
+    // nextId always sits above every id assigned so far.
+    int id = parsedId;
+    bool duplicated = false;
+    if (id >= 1) {
+      for (int j = 0; j < taskCount; ++j) {
+        if (tasks[j].id == id) {
+          duplicated = true;
+          id = -1;
+          break;
+        }
+      }
+    }
+    if (id < 1) {
+      id = nextId++;
+      if (duplicated) {
+        Serial.printf("[Scheduler] duplicate id %d in schedule.cfg; "
+                      "re-assigned to %d.\r\n",
+                      parsedId, id);
+      }
+    } else if (id >= nextId) {
+      nextId = id + 1;
+    }
+
+    tasks[taskCount].id = id;
     tasks[taskCount].spec = spec;
     tasks[taskCount].expression = cronBuf;
     tasks[taskCount].command = command;
     taskCount++;
   }
 
-  // Ids are assigned 1..N in file order, so a reboot with an unchanged file
-  // reproduces exactly the ids spec 7.5 requires to survive a power cycle.
-  nextId = taskCount + 1;
   return true;
 }
 

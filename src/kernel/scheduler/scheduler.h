@@ -19,9 +19,13 @@ class Scheduler {
 public:
   Scheduler();
 
-  // Add a task from a 6-field cron expression. Returns the new id, or -1
-  // when the table is full or the expression does not parse.
-  int add(const char *expression, const String &command);
+  // Add a task from a 6-field cron expression. desiredId > 0 requests a
+  // fixed id (validated against the table before assignment), -1 takes the
+  // next free id. Returns the id, -1 when the table is full or the
+  // expression does not parse, or -2 when desiredId is taken by a different
+  // task. An identical expression+command already present always returns
+  // that task's id — idempotence wins over desiredId.
+  int add(const char *expression, const String &command, int desiredId = -1);
 
   // Remove task by ID
   bool removeTask(int id);

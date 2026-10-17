@@ -1,6 +1,7 @@
 #include "cron.h"
 
 #include <ctype.h>
+#include <stdio.h>
 #include <string.h>
 
 namespace harixos {
@@ -15,6 +16,7 @@ const char kBadStep[] = "step must be >= 1";
 const char kReversed[] = "reversed range";
 const char kMissingCommand[] = "missing command";
 const char kLineTooLong[] = "line too long";
+const char kInvalidId[] = "invalid id (expected id=<n>)";
 
 // Inclusive bounds per field. Index is the 0-based field number.
 struct FieldBounds {
@@ -192,13 +194,27 @@ bool matches(const Spec &spec, const struct tm &timeinfo) {
 }
 
 const char *splitLine(const char *line, char *cronOut, size_t cronCap,
-                      const char **commandOut) {
+                      const char **commandOut, int *idOut) {
   if (line == nullptr || cronOut == nullptr || cronCap == 0 ||
       commandOut == nullptr) {
     return kExpectedSix;
   }
+  if (idOut != nullptr) *idOut = -1;
 
   const char *p = line;
+  if (strncmp(p, "id=", 3) == 0) {
+    p += 3;
+    if (*p < '1' || *p > '9') return kInvalidId;
+    long id = 0;
+    while (*p >= '0' && *p <= '9') {
+      id = id * 10 + (*p - '0');
+      if (id > 999999999L) return kInvalidId;
+      ++p;
+    }
+    if (!isSpace(*p)) return kInvalidId;  // must be followed by the cron fields
+    if (idOut != nullptr) *idOut = (int)id;
+  }
+
   size_t n = 0;
   int fields = 0;
 
@@ -229,21 +245,31 @@ const char *splitLine(const char *line, char *cronOut, size_t cronCap,
 }
 
 const char *makeLine(const char *expression, const char *command, char *out,
-                     size_t cap) {
+                     size_t cap, int id) {
   if (expression == nullptr || command == nullptr || out == nullptr ||
       cap == 0) {
     return kLineTooLong;
   }
 
+  char idBuf[16];
+  size_t idLen = 0;
+  if (id > 0) {
+    int written = snprintf(idBuf, sizeof(idBuf), "id=%d ", id);
+    if (written <= 0 || written >= (int)sizeof(idBuf)) return kLineTooLong;
+    idLen = (size_t)written;
+  }
+
   const size_t exprLen = strlen(expression);
   const size_t cmdLen = strlen(command);
-  if (exprLen + 1 + cmdLen + 2 > cap) return kLineTooLong;  // + ' ', '\n', '\0'
+  // + ' ' between expr and command, '\n', '\0'
+  if (idLen + exprLen + 1 + cmdLen + 2 > cap) return kLineTooLong;
 
-  memcpy(out, expression, exprLen);
-  out[exprLen] = ' ';
-  memcpy(out + exprLen + 1, command, cmdLen);
-  out[exprLen + 1 + cmdLen] = '\n';
-  out[exprLen + 1 + cmdLen + 1] = '\0';
+  if (idLen > 0) memcpy(out, idBuf, idLen);
+  memcpy(out + idLen, expression, exprLen);
+  out[idLen + exprLen] = ' ';
+  memcpy(out + idLen + exprLen + 1, command, cmdLen);
+  out[idLen + exprLen + 1 + cmdLen] = '\n';
+  out[idLen + exprLen + 1 + cmdLen + 1] = '\0';
   return nullptr;
 }
 
