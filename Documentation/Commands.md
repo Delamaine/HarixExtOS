@@ -14,17 +14,22 @@ Core shell commands
 - `update check` — Check for system updates via GitHub
 - `pull <url> <path>` — Download file from the internet (HTTP/HTTPS)
 - `time` — Show time; `time sync`, `time list-tz` (alias `timezones`), `time set` manage NTP/timezone
-- `powerprofile [full|balanced|powersave|minimal|off]` — Power profile (`powerprofile set <profile>|apply|status`)
+- `powerprofile [full|balanced|powersave|light|minimal|off]` — Power profile (`powerprofile set <profile>|apply|status`). `light` = CPU sleeps between DTIM beacons; WiFi/broker stay up, but servos glitch while held. While the saved profile is `light`, a live serial console preempts it with `full` on any received byte (NodeMCU can't sense port-open; RX activity is the proxy) and the stored profile returns 60 s after the last input.
 - `cpufreq [40|80]` — CPU frequency (`cpufreq set <freq>|status`). The
   ESP8266 SDK rejects 40 MHz at runtime, so 80 is the only value that applies.
 - `schedule` — Manage background tasks with 6-field cron
 
 ```
 schedule list
-schedule add <sec> <min> <hour> <dom> <month> <dow> <command>
+schedule add [id=<n>] <sec> <min> <hour> <dom> <month> <dow> <command>
 schedule remove <id>
 schedule run <id>
 ```
+
+  The optional `id=<n>` prefix (n >= 1) picks a specific task id instead of
+  the next free one — rejected if a different task already holds it — so a
+  script can `schedule remove` the same task by a known id. Ids are saved to
+  `/harixos/schedule.cfg` and reload unchanged across a reboot.
 
   Field order and ranges: `sec` 0-59, `min` 0-59, `hour` 0-23, `dom` 1-31,
   `month` 1-12 (numbers only, no `JAN`/`FEB`), `dow` 0-6 with **0 = Sunday**
@@ -46,6 +51,7 @@ schedule run <id>
 schedule add */5 * * * * * heap
 schedule add 0 30 14 * * * settings save
 schedule add 0 0 9 15 * 1 ping
+schedule add id=7 0 0 8 * * * run /scripts/pump-interlock.hx
 ```
 
   The command is everything after the six fields and may contain spaces, so
@@ -57,37 +63,14 @@ schedule add 0 0 9 15 * 1 ping
   once and fires nothing.
 
   Tasks auto-save to `/harixos/schedule.cfg` on every add and remove and
-  reload at boot — there is no `schedule save`. Ids are reassigned `1..N`
-  in file order when loading, so an unchanged file reproduces the same ids
-  after a reboot. A malformed line is skipped with a warning rather than
+  reload at boot — there is no `schedule save`. Each saved line carries
+  `id=<n>`, so ids (including hand-picked ones) reproduce exactly after a
+  reboot; a legacy line without the prefix loads with the next free id, and
+  a duplicate `id=` in a hand-edited file is re-assigned with a boot warning.
+  A malformed line is skipped with a warning rather than
   aborting the load. Re-adding the same cron+command is a no-op success
   (idempotent), so scripts can register their own schedules in `init`
   blocks — see `SCRIPT-REFERENCE.md`.
-
-
-Dynamic powerprofile switching (auto power save)
-- The device auto-lowers power when a serial terminal is not actively
-  connected. Detection is `Serial.available() > 0` (buffered input present),
-  re-evaluated every `loop()`.
-- A state change (connected ⇄ idle) resets a timer. The switch only fires
-  once the state has been stable for **60 seconds**, so brief bursts of
-  traffic never trigger it.
-- **Idle ≥ 60 s** and the current profile is `balanced` or `full` → switch
-  to `powersave` and print `Terminal idle for 1 minute. Switched to
-  powersave.` Profiles already `powersave`, `minimal` or `off` are left
-  untouched.
-- **Reconnected ≥ 60 s** → restore the saved profile from settings and the
-  saved CPU frequency, and print `Terminal active for 1 minute. Restored
-  profile: <profile>.`
-- After a switch the timer resets, so it won't repeat until the state
-  changes again. This runs in `loop()` (`src/main.cpp`) and is independent
-  of `powerprofile set`/`apply`, which drive the same `applyPowerProfile`
-  code path.
-
-  Note: `balanced` and `powersave` both program `MODEM_SLEEP_T` on the
-  ESP8266, so the idle→powersave switch prints a message but does not change
-  the actual WiFi sleep type — the real savings come from the terminal being
-  idle, not from the profile switch itself.
 
 
 Filesystem commands (each works top-level and with an `fs ` prefix,
@@ -195,13 +178,32 @@ servo read <pin>
 servo list
 ```
 
-- Sensors (named registry: ultrasonic, DHT22, DS18B20 daisy-chain, BME280, soil, ldr, BH1750):
+- OLED display (SSD1306 128x64, I2C):
+
+```
+oled init [addr]
+oled clear
+oled line <0-7> <text>
+oled on
+oled off
+oled status
+```
+
+  - Text-only: 21 chars per line (ASCII 32..126, others render as `?`), no
+    graphics. `init` defaults to address 0x3C (`addr` is a decimal 8..119);
+    the shared I2C bus must exist first (`Wire.begin()` at setup — SDA
+    GPIO4, SCL GPIO5 — or `i2c start <sda> <scl>`). Display state is RAM
+    only; re-run `oled init` after a reboot (e.g. from a script `init`
+    block). See `SCRIPT-REFERENCE.md`.
+
+- Sensors (named registry: ultrasonic, DHT22, DS18B20 daisy-chain, BME280, AHT20, soil, ldr, BH1750):
 
 ```
 sensor register ultrasonic <trigger> <echo> <name>
 sensor register dht22 <pin> <name>
 sensor register ds18b20 <pin> [index] <name>
 sensor register bme280 <name>
+sensor register aht20 <name>
 sensor register soil A0 <name>
 sensor register ldr A0 <name>
 sensor register bh1750 <name>
@@ -215,7 +217,7 @@ sensor publish [name]
     `GpioAPI::isAvailablePin`. soil/ldr are raw ADC readings on the single
     ESP8266 analog input and accept only the `A0` (or `17`) pin token, reported
     as a 0-100 percent; bh1750 is an I2C lux sensor (address 0x23) needing no
-    pin. Registered sensors persist to `/sensors.conf`
+    pin, aht20 likewise (I2C 0x38, temperature + humidity). Registered sensors persist to `/sensors.conf`
     (bad lines are skipped with a warning at boot) and their readings publish
     retained to `<mqtt_prefix>/sensor/<name>/<quantity>` (`distance`,
     `temperature`, `humidity`, `pressure`, `moisture`, `illuminance`). See

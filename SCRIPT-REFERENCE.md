@@ -13,15 +13,17 @@ keyword below works identically in both:
 **Settings and time:** `settings`, `time`, `reboot`
 **WiFi and GPIO:** `wifi`, `gpio`, `beep`, `delay`, `system`, `run <path>`, `help`
 **Servo:** `servo attach`, `servo detach`, `servo write`, `servo read`, `servo list`
-**Sensor:** `sensor` register/unregister/list/read/publish (ultrasonic, DHT22, DS18B20, BME280, soil, LDR, BH1750) plus legacy `init|ping|read|list`
+**Display:** `oled init`, `oled clear`, `oled line`, `oled on`, `oled off`, `oled status`
+**Sensor:** `sensor` register/unregister/list/read/publish (ultrasonic, DHT22, DS18B20, BME280, soil, LDR, BH1750, AHT20) plus legacy `init|ping|read|list`
 **Motor:** `motor init`, `motor forward`, `motor reverse`, `motor stop`, `motor brake`, `motor speed`, `motor list`
 **IoT:** `post`, `mqtt`, `relay` set|toggle|status|list, `onchange`, `sensor` publish
-**Automation:** `schedule add|remove|list`
+**Automation:** `schedule add|remove|run|list`
 **Variables:** `set`, `vars list|set|setdefault|get|del|save|load|clear`
+**Power:** `powerprofile <full|balanced|powersave|light|minimal|off> | set <profile> | apply | status`
 
 Shell-only (typing these inside a script or `schedule add` reports
 `Unknown command`): `about`, `pull`, `update`, `serve`, `i2c`, `notepad`,
-`powerprofile`, `cpufreq`, `fs`, `cls`, `reset`, and
+`cpufreq`, `fs`, `cls`, `reset`, and
 the `run list|install|uninstall` subcommands (spec §8 for the deferred
 group).
 
@@ -369,6 +371,26 @@ servo read 4
 servo detach 4
 ```
 
+## OLED Command (SSD1306 128x64)
+
+Text-only driver over the shared I2C bus (`i2c scan` should show `0x3C`).
+21 characters per line, ASCII 32..126, anything else renders as `?`:
+
+```bash
+oled init [addr]        # bring up the display (default 0x3C, addr as decimal 8..119)
+oled clear              # blank all 8 pages
+oled line <0-7> <text>  # write one 21-char line
+oled on                 # display on (or wake from sleep)
+oled off                # display sleep, RAM state kept
+oled status             # prints init state, address, line 0..7
+```
+
+- Nothing renders before `oled init` (per-run guard: `[ERROR] oled not
+  initialized`). Display state is RAM only — re-run `oled init` after a
+  reboot, e.g. from the script's `init` block.
+- The bus must exist first: default `Wire.begin()` at setup (SDA GPIO4,
+  SCL GPIO5), or `i2c start <sda> <scl>`.
+
 ## Sensor Command (Named Registry)
 
 The `sensor` keyword takes one of the register/unregister/list/read/publish
@@ -379,6 +401,7 @@ sensor register ultrasonic <trigger> <echo> <name>   # HC-SR04
 sensor register dht22 <pin> <name>                   # DHT22
 sensor register ds18b20 <pin> [index] <name>         # DS18B20 (daisy-chain index)
 sensor register bme280 <name>                        # BME280/BMP280 (I2C)
+sensor register aht20 <name>                         # AHT10/AHT15/AHT20 (I2C 0x38)
 sensor register soil A0 <name>                       # capacitive soil (A0 only)
 sensor register ldr A0 <name>                        # LDR voltage divider (A0 only)
 sensor register bh1750 <name>                        # BH1750 lux meter (I2C 0x23)
@@ -511,7 +534,7 @@ wifi ip                    # Show IP configuration
 
 ## Time & Schedule Commands (Automation)
 
-`time`, `settings`, `reboot` and `schedule add|remove|list` are script
+`time`, `settings`, `reboot` and `schedule add|remove|run|list` are script
 keywords; the command a task runs uses the script dispatcher listed at the
 top of this document.
 
@@ -534,7 +557,15 @@ schedule remove <id>                   # Delete task
 schedule add */5 * * * * * heap        # Every 5 seconds
 schedule add 0 30 14 * * * settings save   # Daily at 14:30:00
 schedule add 0 0 9 15 * 1 ping         # 09:00:00 on the 15th AND a Monday
+schedule add id=7 0 */5 * * * heap     # Fixed ID 7 (for schedule remove 7)
 ```
+
+An optional `id=<n>` prefix (n >= 1) assigns a specific task id instead of
+the next free one; `schedule add id=<n>` rejects the request when a
+*different* task already holds that id, while re-adding an identical
+cron+command still succeeds as a no-op regardless of the prefix. Use a fixed
+id when a script needs `schedule remove <id>` to target the same task
+forever.
 
 | Field | Range |
 |---|---|
@@ -560,12 +591,14 @@ and needs no quoting. It dispatches through the script command set listed
 at the top of this document.
 
 Tasks auto-save to `/harixos/schedule.cfg` on every `add` and `remove` and
-reload at boot; there is no `schedule save` command. Ids are reassigned
-`1..N` in file order when loading, so an unchanged file reproduces the same
-ids after a reboot. A malformed line in that file is skipped with a warning
-and does not abort the load. Re-adding the same cron+command is a no-op
-success (idempotent), which is what makes `schedule add` safe inside
-script `init` blocks.
+reload at boot; there is no `schedule save` command. Each line persists as
+`id=<n> <expression> <command>`, so ids — including hand-picked ones —
+reproduce exactly after a reboot (a legacy line without the prefix loads as
+its position in the file; a duplicate `id=` in a hand-edited file is
+re-assigned the next free id with a boot warning). A malformed line in that
+file is skipped with a warning and does not abort the load. Re-adding the
+same cron+command is a no-op success (idempotent), which is what makes
+`schedule add` safe inside script `init` blocks.
 
 Before NTP has synced the scheduler prints
 `no valid system time, cron not running` once per boot and fires nothing.

@@ -154,6 +154,7 @@ HarixOS> run uninstall myapp
 - **Getting Started**: [Documentation/Getting-Started.md](Documentation/Getting-Started.md)
 - **Commands Reference**: [Documentation/Commands.md](Documentation/Commands.md)
 - **Script Reference**: [SCRIPT-REFERENCE.md](SCRIPT-REFERENCE.md) — Quick .hx command reference
+- **Script Examples**: [examples/scripts/README.md](examples/scripts/README.md) — Index of 30 self-contained `.hx` automations (wiring, cron, MQTT knobs)
 - **MQTT & Home Assistant**: [Documentation/ha-mqtt.md](Documentation/ha-mqtt.md) — MQTT topics, discovery, onchange rules
 - **Filesystem Guide**: [Documentation/Filesystem.md](Documentation/Filesystem.md)
 - **Notepad Guide**: [Documentation/Notepad.md](Documentation/Notepad.md)

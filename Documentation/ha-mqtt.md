@@ -121,9 +121,10 @@ mosquitto_pub -t harixos/a590a8/shell/in -m "heap"
 - Available: `print`, `gpio`, `wifi`, `delay`, `system`, `heap`, `uptime`,
   `chip`, `info`, `adc`, `calc`, filesystem commands, `settings`, `time`,
   `reboot`, `run <path>`, `post`, `mqtt`, `onchange`, `relay`, `servo`,
-  `sensor`, `motor`, `set`, `vars`, `help`, `#` comments, `while`/`if` control flow.
+  `sensor`, `motor`, `beep`, `set`, `vars`, `schedule`, `powerprofile`,
+  `help`, `#` comments, `while`/`if` control flow.
 - **Not** available: `about`, `pull`, `update`, `serve`, `i2c`, `notepad`,
-  `schedule`, `powerprofile`, `cpufreq`, `fs`, `cls`, `reset`,
+  `cpufreq`, `fs`, `cls`, `reset`,
   `run list|install|uninstall`.
 - `gpio` uses the script form (`gpio <pin> on|off|read|toggle|mode|pulse`),
   not the shell form (`gpio write <pin> …`).
@@ -393,6 +394,7 @@ sensor register ultrasonic <trigger> <echo> <name>   # HC-SR04
 sensor register dht22 <pin> <name>                   # DHT22
 sensor register ds18b20 <pin> [index] <name>         # DS18B20 (daisy-chain index)
 sensor register bme280 <name>                        # BME280/BMP280 (I2C; probed 0x76/0x77)
+sensor register aht20 <name>                         # AHT10/AHT15/AHT20 (I2C 0x38; temp + humidity)
 sensor register soil A0 <name>                       # capacitive soil moisture (ADC A0, %)
 sensor register ldr A0 <name>                        # photoresistor divider (ADC A0, %)
 sensor register bh1750 <name>                        # BH1750 digital lux sensor (I2C 0x23)
