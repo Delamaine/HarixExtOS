@@ -121,7 +121,7 @@ mosquitto_pub -t harixos/a590a8/shell/in -m "heap"
 - Available: `print`, `gpio`, `wifi`, `delay`, `system`, `heap`, `uptime`,
   `chip`, `info`, `adc`, `calc`, filesystem commands, `settings`, `time`,
   `reboot`, `run <path>`, `post`, `mqtt`, `onchange`, `relay`, `servo`,
-  `sensor`, `motor`, `beep`, `set`, `vars`, `schedule`, `powerprofile`,
+  `sensor`, `motor`, `beep`, `oled`, `set`, `vars`, `schedule`, `powerprofile`,
   `help`, `#` comments, `while`/`if` control flow.
 - **Not** available: `about`, `pull`, `update`, `serve`, `i2c`, `notepad`,
   `cpufreq`, `fs`, `cls`, `reset`,
@@ -479,6 +479,11 @@ brokers where `mqtt_discover=off`.
   `mqtt status`.
 - Commands received over MQTT work inside `while` loops and scheduled tasks.
 - `mqtt pub` targets the topic **verbatim** — no prefix is added.
+- Boot-time MQTT: put `mqtt pub ...` lines in `/profile.hx` (the firmware
+  runs it once per boot after the MQTT service starts) instead of a
+  forever cron job. If the first connect has not completed yet the publish
+  errors and continues — availability `online`/`offline` (LWT) remains the
+  reliable boot signal.
 
 ## Troubleshooting
 

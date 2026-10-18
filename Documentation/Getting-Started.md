@@ -98,6 +98,11 @@ delay 500
 # HarixOS> run /scripts/blink.hx
 ```
 
+**Boot profile:** a `/profile.hx` file in the filesystem root runs once at
+every boot (after all subsystems are up, before the first prompt) — no
+cron job needed for startup actions like `mqtt pub` or `run
+/scripts/<app>.hx`. Absent file = nothing happens.
+
 **Common script commands:**
 - `gpio <pin> on|off|read|toggle` — control GPIO
 - `delay <ms>` — wait (milliseconds)

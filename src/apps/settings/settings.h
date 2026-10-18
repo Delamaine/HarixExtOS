@@ -4,6 +4,9 @@
 
 namespace harixos {
 
+// OS identity reported by `settings show`; bump when cutting a release.
+constexpr const char kOsVersion[] = "0.9";
+
 struct AppSettings {
   bool bannerEnabled = true;
   String timezone = "UTC";

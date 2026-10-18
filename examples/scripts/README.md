@@ -6,6 +6,12 @@ Self-contained automation examples for the ESP8266 build. Each folder pairs a
 and the MQTT knobs. Copy the script into `/scripts/<name>.hx` with `notepad`,
 set the pins for your board, reboot — it registers itself.
 
+Optional: write `run /scripts/<name>.hx` lines into a `/profile.hx` file on
+the device and the firmware executes them once at every boot (after all
+subsystems are up, before the first prompt) — boot registration with no
+manual first run after flashing and no schedule tick. See the boot profile
+bullet under `init` in [SCRIPT-REFERENCE.md](../../SCRIPT-REFERENCE.md).
+
 ## Alarms & notifications
 
 - [daily-digest](daily-digest/README.md) — 08:00 health digest to console and ntfy; the `print` + lenient `$vars` example.

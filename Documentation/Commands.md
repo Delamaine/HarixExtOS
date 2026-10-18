@@ -38,8 +38,10 @@ schedule run <id>
   Each field accepts `*`, `n`, `a-b`, `*/n`, `a-b/n`, and comma lists such
   as `1,3,5`. `*/n` starts at the field's minimum (0 for sec/min/hour/dow,
   1 for dom/month), ranges never wrap (`5-1` is rejected), and `n <= 0` is
-  rejected. There is no `@reboot`; the six fields above are the only
-  accepted form.
+  rejected. There is no `@reboot` field; boot-time execution is the
+  `/profile.hx` boot profile — a script the firmware runs once from
+  `setup()` after all subsystems are up (absent file = skip). The six
+  fields above are the only accepted cron form.
 
   **`dom` and `dow` are AND-ed when both are restricted — this differs from
   Linux cron, which ORs them.** `0 0 9 15 * 1` runs only when the 15th is
@@ -91,7 +93,7 @@ There is no `format` command; LittleFS is formatted at provision time.
 
 Apps and variables
 - `notepad <path>` — Open interactive line editor
-- `settings` — Show and edit persistent shell settings (`settings show|banner|timezone|tz|hostname|update|save|reload`); dotted hostnames supported (e.g. `esp8266.rimu` → `esp8266.rimu.local`; resolves via mDNS on macOS/Linux — Windows natively resolves only two-label `.local` names)
+- `settings` — Show and edit persistent shell settings (`settings show|banner|timezone|tz|hostname|update|save|reload`); `settings show` also prints the OS version (`kOsVersion`, currently `0.9`) and the config path; dotted hostnames supported (e.g. `esp8266.rimu` → `esp8266.rimu.local`; resolves via mDNS on macOS/Linux — Windows natively resolves only two-label `.local` names)
 - `calc <expr>` — Evaluate arithmetic expressions (max 64 tokens per expression)
 - `set <name> = <expr>` — Store a script variable usable as `$name`
 - `vars [list|set|setdefault|get|del|save|load|clear]` — Global variable store

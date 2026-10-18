@@ -222,6 +222,7 @@ bool saveSettings(const AppSettings &settings) {
 
 void printSettings(const AppSettings &settings, Print &out) {
   out.println(F("Settings"));
+  out.printf("  OS version: %s\r\n", kOsVersion);
   out.printf("  Boot banner: %s\n", settings.bannerEnabled ? "ON" : "OFF");
   out.printf("  Timezone: %s\r\n", settings.timezone.c_str());
   out.printf("  WiFi SSID: %s\r\n", settings.wifiSSID.length() > 0 ? settings.wifiSSID.c_str() : "(not set)");

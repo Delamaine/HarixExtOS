@@ -279,6 +279,12 @@ end
 - The `init ... end` block runs **once per boot**. Later runs of the same
   script skip it; a reboot is the only reset. After reboot the persisted
   schedule fires again and re-runs the script, so init re-registers itself.
+- Boot profile: if `/profile.hx` exists, the firmware runs it from
+  `setup()` once per boot, after all subsystems are up and before the first
+  prompt (absent file = silent skip). It is an ordinary script, so
+  `run /scripts/myapp.hx` inside it executes `myapp`'s `init` block at every
+  boot — the boot trigger for examples that should not depend on a schedule
+  tick or a manual first run. `run /profile.hx` executes it manually.
 - The once-per-boot gate is shared: `run`, the scheduler and `shell/in`
   all consult the same RAM table keyed by script path (max 8 scripts).
 - Use only idempotent commands in `init`: `schedule add` (same cron+command

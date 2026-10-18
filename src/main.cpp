@@ -2553,6 +2553,18 @@ void setup() {
   harixos::iot::beginRelay();
   harixos::api::beginSensor();
 
+  // Boot profile: /profile.hx runs once per boot, after every subsystem is
+  // up and before the first prompt. Presence = enabled, absence stays
+  // silent. Its `init` block keys the same per-path gate as any script, so
+  // `run /scripts/x.hx` inside it executes x's init exactly once per boot.
+  {
+    String profile = harixos::readText("/profile.hx");
+    if (profile.length() > 0) {
+      Serial.println(F("[profile] running /profile.hx"));
+      harixos::api::ScriptEngine::executeScript(profile, Serial, "/profile.hx");
+    }
+  }
+
   printPrompt();
   
   // Ensure the serial buffer is completely sent before starting the main loop
