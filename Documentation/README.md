@@ -11,6 +11,7 @@ Files
 - [Apps.md](Apps.md) — How to add and organize apps under `src/apps/`
 - [API.md](API.md) — Building apps with the HarixOS API
 - [ha-mqtt.md](ha-mqtt.md) — MQTT service, Home Assistant discovery, onchange rules
+- [MQTT-Security.md](MQTT-Security.md) — Mosquitto auth, per-device ACLs, lockout recovery
 - [Troubleshooting.md](Troubleshooting.md) — Common issues and fixes
 
 ---

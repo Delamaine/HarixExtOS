@@ -69,6 +69,12 @@ mqtt start        # also persists mqtt_enabled=on
 mqtt status
 ```
 
+## Security
+
+`<prefix>/shell/in` executes shell commands, so anyone who can publish to it
+owns the device — the broker must reject anonymous clients. Setup, accounts,
+ACLs and lockout recovery: [`MQTT-Security.md`](MQTT-Security.md).
+
 ## Topic Map
 
 ```

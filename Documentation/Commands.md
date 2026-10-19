@@ -134,7 +134,8 @@ IoT (MQTT / webhooks)
   `mqtt_port`, `mqtt_user`, `mqtt_pass`, `mqtt_prefix`, `mqtt_interval`,
   `mqtt_discover`, `mqtt_enabled` in `/harixos/settings.cfg` — there is no
   `settings mqtt_*` command; edit the file and run `settings reload`.
-  Full topic map, HA discovery and examples: `Documentation/ha-mqtt.md`.
+  Full topic map, HA discovery and examples: `Documentation/ha-mqtt.md`;
+  broker auth and ACLs: `Documentation/MQTT-Security.md`.
 
 - `post <url> <body> [content-type]` — HTTP POST webhook
   (content-type defaults to `application/json`)
