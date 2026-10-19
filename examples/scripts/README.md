@@ -38,6 +38,7 @@ bullet under `init` in [SCRIPT-REFERENCE.md](../../SCRIPT-REFERENCE.md).
 - [gauge-needle](gauge-needle/README.md) — DHT22 temperature mapped onto a servo needle; a physical dial gauge with a retunable scale.
 - [pan-tilt-remote](pan-tilt-remote/README.md) — Two servos as a remote mount: `vars set pan/tilt` over MQTT with per-axis acks.
 - [pet-feeder](pet-feeder/README.md) — Servo hopper feeds at 07:30/18:30; portion and dwell are `$vars` knobs.
+- [pet-height-gate](pet-height-gate/README.md) — Overhead HC-SR04 opens the bowl lid for a cat-sized visitor, shuts it for taller intruders.
 - [radar-sweep](radar-sweep/README.md) — Servo sweeps the head; cached ultrasonic distance feeds HA graphs.
 - [servo-lock](servo-lock/README.md) — Deadbolt servo with a reed interlock: refuses to lock while the door is open, acks the bolt state.
 
