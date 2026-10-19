@@ -77,6 +77,8 @@ Common commands
 - `gpio list` — show available GPIO pins
 - `wifi scan` — scan nearby networks
 - `run /scripts/myapp.hx` — execute a .hx script
+- `↑` / `↓` — recall the last 16 typed commands (serial console; RAM-only,
+  cleared on reboot; `wifi connect` lines are not stored)
 
 See Full Commands Documentation: [View Here](Commands.md)
 ## .hx Scripts (Automation & External Apps)

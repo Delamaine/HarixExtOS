@@ -23,6 +23,7 @@
 #define HARIXOS_AUTHOR "Haris"
 #include "apps/notepad/notepad.h"
 #include "apps/settings/settings.h"
+#include "api/cmd_history.h"
 #include "kernel/filesystem/filesystem.h"
 #include "kernel/crash_log.h"
 #include "kernel/iot/mqtt_service.h"
@@ -198,7 +199,9 @@ void prepareBootStrapPinsForReset() {
 }
 
 void printPrompt() {
-  Serial.print(F("HarixOS> "));
+  // \r first: a bare-LF line earlier in the command leaves the cursor
+  // mid-row, which would indent the prompt (raw serial has no auto-CR).
+  Serial.print(F("\rHarixOS> "));
   promptVisible = true;
 }
 
@@ -604,6 +607,9 @@ void handleCat(const TokenizedLine &cmd) {
     return;
   }
 
+  // Files store LF; the raw serial console has no auto-CR, so LF alone
+  // would leave the cursor column and staircase every following line.
+  content.replace("\n", "\r\n");
   Serial.print(content);
   if (!content.endsWith("\n")) {
     Serial.println();
@@ -2255,11 +2261,46 @@ void executeCommand(const String &line) {
 
 void handleSerialInput() {
   static unsigned long lastCharTime = 0;
+  static uint8_t escState = 0;      // 0 = none, 1 = after ESC, 2 = after ESC[
+  static size_t histCursor = 0;     // 0 = fresh line; n = n-th newest recall
   const unsigned long serialDebounceMs = 50;
 
   while (Serial.available() > 0) {
     char c = static_cast<char>(Serial.read());
     lastCharTime = millis();
+
+    // Arrow-key sequences (ESC [ A = up, ESC [ B = down) walk the command
+    // history ring; every other CSI sequence is swallowed silently.
+    if (escState == 1) {
+      escState = (c == '[') ? 2 : 0;
+      continue;
+    }
+    if (escState == 2) {
+      escState = 0;
+      if (c == 'A' || c == 'B') {
+        size_t maxBack = harixos::api::history::count();
+        if (c == 'A') {
+          if (histCursor < maxBack) {
+            ++histCursor;
+          }
+        } else if (histCursor > 0) {
+          --histCursor;
+        }
+        const char *entry = (histCursor == 0)
+                                ? nullptr
+                                : harixos::api::history::get(histCursor);
+        Serial.print(F("\r\x1b[K"));
+        printPrompt();
+        inputLine = (entry != nullptr) ? String(entry) : String();
+        Serial.print(inputLine);
+        continue;
+      }
+      continue;
+    }
+    if (c == 0x1B) {
+      escState = 1;
+      continue;
+    }
 
     if (c == '\r' || c == '\n') {
       if (inputLine.length() > 0) {
@@ -2267,6 +2308,11 @@ void handleSerialInput() {
         String line = trimCopy(inputLine);
         inputLine = String();
         promptVisible = false;
+        histCursor = 0;
+        // Passwords: `wifi connect <ssid> <pass>` stays out of the ring.
+        if (!line.startsWith("wifi connect")) {
+          harixos::api::history::push(line.c_str());
+        }
         executeCommand(line);
       } else if (promptVisible) {
         Serial.println();
