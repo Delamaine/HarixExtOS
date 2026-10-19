@@ -1,0 +1,11 @@
+user homeassistant
+topic read #
+topic write harixos/+/shell/in
+
+user admin
+topic read #
+topic write harixos/+/shell/in
+
+pattern readwrite %u/#
+pattern write homeassistant/#
+pattern write tele/#
