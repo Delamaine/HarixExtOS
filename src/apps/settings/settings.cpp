@@ -223,10 +223,10 @@ bool saveSettings(const AppSettings &settings) {
 void printSettings(const AppSettings &settings, Print &out) {
   out.println(F("Settings"));
   out.printf("  OS version: %s\r\n", kOsVersion);
-  out.printf("  Boot banner: %s\n", settings.bannerEnabled ? "ON" : "OFF");
+  out.printf("  Boot banner: %s\r\n", settings.bannerEnabled ? "ON" : "OFF");
   out.printf("  Timezone: %s\r\n", settings.timezone.c_str());
   out.printf("  WiFi SSID: %s\r\n", settings.wifiSSID.length() > 0 ? settings.wifiSSID.c_str() : "(not set)");
-  out.printf("  Auto Update Check: %s\n", settings.autoUpdateCheck ? "ON" : "OFF");
+  out.printf("  Auto Update Check: %s\r\n", settings.autoUpdateCheck ? "ON" : "OFF");
   out.printf("  Power Profile: %s\r\n", settings.powerProfile.c_str());
   out.printf("  CPU Freq: %d MHz\r\n", settings.cpufreq);
   out.printf("  MQTT: %s  %s:%u  prefix=%s  interval=%us  discover=%s\r\n",
@@ -237,7 +237,7 @@ void printSettings(const AppSettings &settings, Print &out) {
              (unsigned)settings.mqttInterval,
              settings.mqttDiscover ? "on" : "off");
   out.printf("  Hostname: %s\r\n", settings.hostname.c_str());
-  out.printf("  Config file: %s\n", kSettingsPath);
+  out.printf("  Config file: %s\r\n", kSettingsPath);
 }
 
 }  // namespace harixos

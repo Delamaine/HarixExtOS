@@ -54,15 +54,15 @@ void runNotepad(const String &path) {
   bool dirty = false;
 
   Serial.println();
-  Serial.printf("HarixOS Notepad: %s\n", targetPath.c_str());
+  Serial.printf("HarixOS Notepad: %s\r\n", targetPath.c_str());
   Serial.println(F("Enter text line by line. Commands start with ':'."));
   Serial.println(F("Type :help for editor commands."));
   if (buffer.length() > 0) {
-    Serial.printf("Loaded %u bytes.\n", static_cast<unsigned>(buffer.length()));
+    Serial.printf("Loaded %u bytes.\r\n", static_cast<unsigned>(buffer.length()));
   }
 
   while (true) {
-    Serial.print(F("notepad> "));
+    Serial.print(F("\rnotepad> "));
     String line = readEditorLine();
 
     if (line.startsWith(":")) {
@@ -73,8 +73,10 @@ void runNotepad(const String &path) {
         printNotepadHelp();
       } else if (command == F("show")) {
         Serial.println(F("--- Buffer ---"));
-        Serial.print(buffer);
-        if (!buffer.endsWith("\n")) {
+        String shown = buffer;
+        shown.replace("\n", "\r\n");
+        Serial.print(shown);
+        if (!shown.endsWith("\n")) {
           Serial.println();
         }
         Serial.println(F("--------------"));

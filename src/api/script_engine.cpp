@@ -440,6 +440,10 @@ ApiResult ScriptEngine::handleFilesystemCommand(const String &name,
     if (content.length() == 0 && !harixos::exists(path)) {
       return ApiResult(API_ERROR, "cat: file not found");
     }
+    if (&output == &Serial) {
+      // Serial console has no auto-CR; buffers (MQTT capture etc.) keep LF.
+      content.replace("\n", "\r\n");
+    }
     output.print(content);
     if (!content.endsWith("\n")) {
       output.println();
