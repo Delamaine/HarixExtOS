@@ -32,8 +32,53 @@ const char *BlockStack::onWhile(int lineStart, int bodyStart, bool cond,
   lastJumpTarget_ = -1;
   if (depth_ == kMaxBlockDepth) return "Block nesting limit exceeded";
   const bool running = !skipping() && cond;
-  frames_[depth_++] = {true, running, true, lineStart, bodyStart, nowMs, 0};
+  frames_[depth_++] = {true, running, true, lineStart, bodyStart, nowMs, 0,
+                       false, false, false, 0};
   return nullptr;
+}
+
+const char *BlockStack::onTry(int catchStart) {
+  lastJumpTarget_ = -1;
+  if (depth_ == kMaxBlockDepth) return "Block nesting limit exceeded";
+  if (catchStart < 0) return "try without catch";
+  const bool running = !skipping();
+  // seenElse doubles as "consumed" for try frames (skipped region or
+  // broken-through): a consumed catch never runs and never catches.
+  frames_[depth_++] = {false, running, !running, 0, 0, 0, 0,
+                       true, false, false, catchStart};
+  return nullptr;
+}
+
+const char *BlockStack::onCatch() {
+  if (depth_ == 0) return "catch without try";
+  Frame &top = frames_[depth_ - 1];
+  if (!top.isTry) return "catch without try";
+  if (top.inCatch) return nullptr;  // already entered by onError's jump
+  top.inCatch = true;
+  if (!top.errorCaught) {
+    top.running = false;  // try body finished clean: skip the catch body
+  }
+  return nullptr;
+}
+
+bool BlockStack::onError(int &jumpTo) {
+  jumpTo = -1;
+  // Walk down without mutating first: an unhandled error must leave every
+  // enclosing block intact (execution continues on the next line).
+  for (size_t i = depth_; i-- > 0;) {
+    const Frame &f = frames_[i];
+    if (!f.isTry) continue;
+    if (f.inCatch) continue;    // bubbles past catch-phase tries
+    if (f.seenElse) continue;   // consumed (skipped or broken-through)
+    // Caught: abandon every frame above it (their `end` lines never run).
+    depth_ = i + 1;
+    Frame &t = frames_[i];
+    t.inCatch = true;
+    t.errorCaught = true;
+    jumpTo = t.catchStart;
+    return true;
+  }
+  return false;
 }
 
 const char *BlockStack::onBreak() {
@@ -70,6 +115,7 @@ const char *BlockStack::onEvent(BlockEvent ev, bool cond, uint32_t nowMs) {
     case BlockEvent::Else:
       if (depth_ == 0) return "else without matching if";
       if (frames_[depth_ - 1].isWhile) return "else without matching if";
+      if (frames_[depth_ - 1].isTry) return "else without matching if";
       if (frames_[depth_ - 1].seenElse) return nullptr;
       frames_[depth_ - 1].running = !frames_[depth_ - 1].running;
       frames_[depth_ - 1].seenElse = true;

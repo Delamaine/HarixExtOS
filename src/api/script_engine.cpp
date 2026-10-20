@@ -721,6 +721,37 @@ ApiResult ScriptEngine::executeCommand(const String &command, Stream &output) {
   }
 }
 
+// Forward-scan from just after a `try` line for its matching `catch` line,
+// counting nested try/catch pairs. Returns the raw offset of the catch
+// line (the jump target), or -1 when the script has no matching catch.
+static int findMatchingCatch(const String &script, int fromIdx, int scriptLen) {
+  int depth = 1;
+  int start = fromIdx;
+  while (start < scriptLen) {
+    int nl = script.indexOf('\n', start);
+    if (nl == -1) {
+      nl = scriptLen;
+    }
+    String line = script.substring(start, nl);
+    line.trim();
+    if (line.length() > 0 && !line.startsWith("#")) {
+      int sp = line.indexOf(' ');
+      String word = sp < 0 ? line : line.substring(0, sp);
+      word.toLowerCase();
+      if (word == "try") {
+        ++depth;
+      } else if (word == "catch") {
+        --depth;
+        if (depth == 0) {
+          return start;
+        }
+      }
+    }
+    start = nl + 1;
+  }
+  return -1;
+}
+
 ApiResult ScriptEngine::executeScript(const String &script, Stream &output,
                                      const String &path) {
   ScriptDepthGuard guard;
@@ -787,25 +818,60 @@ ApiResult ScriptEngine::executeScript(const String &script, Stream &output,
             output.println(F("[OK] init already done this boot, skipping"));
           }
         }
+      } else if (cmd.name == "try") {
+        // Structural like if/while: skipped regions still push frames so
+        // their `end`/`catch` lines stay balanced.
+        const char *err = blocks.onTry(findMatchingCatch(script, endIdx + 1, scriptLen));
+        if (err != nullptr) {
+          output.printf("[ERROR] %s: %s\r\n", line.c_str(), err);
+          ++errorCount;
+        }
+      } else if (cmd.name == "catch") {
+        const char *err = blocks.onCatch();
+        if (err != nullptr) {
+          output.printf("[ERROR] %s: %s\r\n", line.c_str(), err);
+          ++errorCount;
+        }
+      } else if (cmd.name == "throw") {
+        if (!blocks.skipping()) {
+          int jump = -1;
+          if (blocks.onError(jump)) {
+            harixos::api::vars::setString("error",
+                                          cmd.args.length() > 0 ? cmd.args.c_str() : "throw");
+            jumpTo = jump;
+          } else {
+            output.printf("[ERROR] throw: %s\r\n",
+                          cmd.args.length() > 0 ? cmd.args.c_str() : "(no try to catch)");
+            ++errorCount;
+          }
+        }
       } else if (cmd.name == "if" || cmd.name == "while") {
         bool cond = false;
         if (!blocks.skipping()) {
           double v = 0;
           if (!harixos::api::expr::evaluate(cmd.args.c_str(), v)) {
-            output.printf("[ERROR] %s %s: Invalid expression.\r\n",
-                          cmd.name.c_str(), cmd.args.c_str());
-            ++errorCount;
+            int jump = -1;
+            if (blocks.onError(jump)) {
+              harixos::api::vars::setString("error", "invalid expression");
+              jumpTo = jump;
+            } else {
+              output.printf("[ERROR] %s %s: Invalid expression.\r\n",
+                            cmd.name.c_str(), cmd.args.c_str());
+              ++errorCount;
+            }
           } else {
             cond = !isnan(v) && v != 0;
           }
         }
-        const char *err =
-            cmd.name == "while"
-                ? blocks.onWhile(startIdx, endIdx + 1, cond, millis())
-                : blocks.onEvent(harixos::api::BlockEvent::If, cond);
-        if (err != nullptr) {
-          output.printf("[ERROR] %s: %s\r\n", line.c_str(), err);
-          ++errorCount;
+        if (jumpTo < 0) {
+          const char *err =
+              cmd.name == "while"
+                  ? blocks.onWhile(startIdx, endIdx + 1, cond, millis())
+                  : blocks.onEvent(harixos::api::BlockEvent::If, cond);
+          if (err != nullptr) {
+            output.printf("[ERROR] %s: %s\r\n", line.c_str(), err);
+            ++errorCount;
+          }
         }
       } else if (cmd.name == "break") {
         if (!blocks.skipping()) {
@@ -839,28 +905,42 @@ ApiResult ScriptEngine::executeScript(const String &script, Stream &output,
           Command wcmd = parseCommand(wline);
           double v = 0;
           if (!harixos::api::expr::evaluate(wcmd.args.c_str(), v)) {
-            output.printf("[ERROR] while %s: Invalid expression.\r\n",
-                          wcmd.args.c_str());
-            ++errorCount;
+            int jump = -1;
+            if (blocks.onError(jump)) {
+              harixos::api::vars::setString("error", "invalid expression");
+              jumpTo = jump;
+            } else {
+              output.printf("[ERROR] while %s: Invalid expression.\r\n",
+                            wcmd.args.c_str());
+              ++errorCount;
+            }
           } else {
             cond = !isnan(v) && v != 0;
           }
         }
-        const char *err = blocks.onEvent(
-            cmd.name == "else" ? harixos::api::BlockEvent::Else
-                               : harixos::api::BlockEvent::End,
-            cond, millis());
-        if (err != nullptr) {
-          output.printf("[ERROR] %s: %s\r\n", line.c_str(), err);
-          ++errorCount;
+        if (jumpTo < 0) {
+          const char *err = blocks.onEvent(
+              cmd.name == "else" ? harixos::api::BlockEvent::Else
+                                 : harixos::api::BlockEvent::End,
+              cond, millis());
+          if (err != nullptr) {
+            output.printf("[ERROR] %s: %s\r\n", line.c_str(), err);
+            ++errorCount;
+          }
+          jumpTo = blocks.lastJumpTarget();
         }
-        jumpTo = blocks.lastJumpTarget();
         }
       } else if (!blocks.skipping()) {
         ApiResult result = executeCommand(line, output);
         if (result.isError()) {
-          output.printf("[ERROR] %s: %s\r\n", line.c_str(), result.message.c_str());
-          ++errorCount;
+          int jump = -1;
+          if (blocks.onError(jump)) {
+            harixos::api::vars::setString("error", result.message.c_str());
+            jumpTo = jump;
+          } else {
+            output.printf("[ERROR] %s: %s\r\n", line.c_str(), result.message.c_str());
+            ++errorCount;
+          }
         } else if (result.message.length() > 0) {
           output.printf("[OK] %s\r\n", result.message.c_str());
         }

@@ -6,7 +6,7 @@
 keyword below works identically in both:
 
 **Output and control:** `print`, `if`/`else`/`end`, `while`/`end`, `break`,
-`init`/`end`, `#`
+`try`/`catch`/`throw`, `init`/`end`, `#`
 **System values:** `heap`, `uptime`, `chip`, `info`, `adc`, `calc`
 **Filesystem:** `pwd`, `cd`, `ls`, `mkdir`, `touch`, `rm`, `cp`, `mv`,
 `cat`, `write`, `append`
@@ -263,6 +263,39 @@ end
   commands for periodic work.
 - `while`/`break` are **script-only**, like `if`. A single scheduled
   `while` never opens a block.
+
+## Error Handling (`try` / `catch` / `throw`)
+
+```bash
+set failed = 0
+try
+  gpio 12 pulse 1
+  throw door-jammed
+catch
+  set failed = 1
+  print caught: $error
+end
+print continuing, failed=$failed
+```
+
+- A failing command inside `try` (invalid GPIO, missing file, bad
+  expression, …) or a `throw <message>` jumps to the matching `catch`;
+  execution resumes there with `$error` set to the message. Without a
+  `try`, errors behave as always: reported, counted, script continues.
+- The `catch` body runs **only** when an error occurred — like `else` for
+  errors. After `catch`/`end`, execution continues after the `end`.
+- `$error` (a normal string var) is set on entry to a catching `catch`.
+  Don't name a user variable `error` if you use try/catch.
+- `throw <text>` raises your own error; with no text, `$error` becomes
+  `throw`. An error **inside** a `catch` body is not re-caught by its own
+  `try` — it bubbles to the next outer `try`, or is reported as usual.
+- `try` without a matching `catch` is an error (`try without catch`);
+  `catch` or `else` without `try` likewise. Nesting follows the same
+  **8-level** cap as `if`/`while` (they share one stack). `break` through
+  a `try` skips its `catch` body.
+- `try`/`catch`/`throw` are **script-only**, like `if`. Errors in scripts
+  launched by `run` surface at the `run` line, so an enclosing `try` in
+  the parent script can catch them.
 
 ## Init Block (`init` / `end`)
 
