@@ -6,7 +6,9 @@ A panic button with a rich push: one press sends an **urgent** ntfy
 notification with a title and tags in a single JSON body — the ntfy
 publish-in-JSON form (`POST https://ntfy.sh` with a `topic` field, not the
 topic-in-URL form leak-webhook uses). A cooldown knob stops a bouncing or
-held button from flooding the topic. The button pin is a `$vars`-free zone —
+held button from flooding the topic. A failed post clears the cooldown
+inside `try`/`catch`, so the next press retries instead of silently losing
+the panic. The button pin is a `$vars`-free zone —
 the knobs are `topic` and `cooldown`.
 
 ## Wiring (NodeMCU v2)

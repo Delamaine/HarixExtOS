@@ -549,6 +549,10 @@ Script execution continues even if individual commands fail. Errors are logged w
 --- Script Complete: 4 lines, 2 errors ---
 ```
 
+To intercept an error instead of continuing, wrap the fallible lines in
+`try` … `catch` … `end`; `$error` holds the message (see the Error
+Handling section of `SCRIPT-REFERENCE.md`).
+
 Check the error messages to debug your scripts. All status codes are logged with human-readable messages.
 
 ## App Manager (Script Installation)

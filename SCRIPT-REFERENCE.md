@@ -263,6 +263,8 @@ end
   commands for periodic work.
 - `while`/`break` are **script-only**, like `if`. A single scheduled
   `while` never opens a block.
+- An error inside a `try` block jumps straight to its `catch` instead —
+  see Error Handling below.
 
 ## Error Handling (`try` / `catch` / `throw`)
 
@@ -285,7 +287,8 @@ print continuing, failed=$failed
 - The `catch` body runs **only** when an error occurred — like `else` for
   errors. After `catch`/`end`, execution continues after the `end`.
 - `$error` (a normal string var) is set on entry to a catching `catch`.
-  Don't name a user variable `error` if you use try/catch.
+  Messages longer than 32 chars are truncated. Don't name a user variable
+  `error` if you use try/catch.
 - `throw <text>` raises your own error; with no text, `$error` becomes
   `throw`. An error **inside** a `catch` body is not re-caught by its own
   `try` — it bubbles to the next outer `try`, or is reported as usual.
@@ -771,6 +774,9 @@ delay -100     # ERROR: Delay must be > 0
 ```
 **Fix:** Use positive milliseconds (delay 100)
 
+Any of these errors can be caught with `try`/`catch` instead of avoided —
+see Error Handling above.
+
 ## Installing and Running Scripts
 
 ### Step 1: Install
@@ -816,6 +822,8 @@ run uninstall myapp
 ```
 [ERROR] command line: Error message
 ```
+(Inside a `try`, nothing is printed here — execution jumps to `catch`
+with `$error` set.)
 
 **Script Summary:**
 ```

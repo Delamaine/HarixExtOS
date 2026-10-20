@@ -48,7 +48,7 @@ today, so the cron parser is hand-rolled.
 | Value capture | `set x = <expr>` with pre-expansion of value tokens and `$name` |
 | `set` availability | Shell prompt **and** scripts |
 | `if` availability | **Scripts only** (no multi-line buffering at the prompt) |
-| Control flow | Forward-only `if` / `else` / `end` + `while` / `break` (added 2026-10-01); no `elif` |
+| Control flow | Forward-only `if` / `else` / `end` + `while` / `break` (added 2026-10-01); no `elif`; `try` / `catch` / `throw` with `$error` (added 2026-10-21) |
 | Scheduler format | 6-field cron (`sec min hour dom month dow`), the only syntax |
 | `HH:MM` and `+Ns` | **Dropped** — breaking change, docs rewritten |
 | `dom` / `dow` | **AND** semantics (deviates from standard cron, documented) |

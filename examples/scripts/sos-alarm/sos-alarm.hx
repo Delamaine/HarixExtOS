@@ -3,7 +3,9 @@
 # the poll schedule and the defaults once per boot. On each button press the
 # script POSTs a rich ntfy JSON notification -- title, priority and tags in
 # one body -- to the topic in $topic. A $cooldown second gap (epoch-based)
-# stops a bouncing or held button from spamming the topic. JSON bodies must
+# stops a bouncing or held button from spamming the topic; a failed post
+# clears the cooldown inside try/catch, so the next press retries instead
+# of silently losing the panic. JSON bodies must
 # stay space-free (post splits arguments on spaces). Button edges also reach
 # MQTT via onchange (<prefix>/gpio/4 + HA binary_sensor class door).
 # Wiring: momentary button D2 (GPIO4) to GND + external 10k pull-up to 3V3
@@ -25,7 +27,11 @@ if $pressed != $prev
     set now = time
     if $now - $last >= $cooldown
       set last = $now
-      post https://ntfy.sh {"topic":"$topic","title":"SOS","message":"help","priority":"urgent","tags":["warning","sos"]}
+      try
+        post https://ntfy.sh {"topic":"$topic","title":"SOS","message":"help","priority":"urgent","tags":["warning","sos"]}
+      catch
+        set last = 0
+      end
     end
   end
 end

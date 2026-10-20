@@ -128,7 +128,10 @@ mosquitto_pub -t harixos/a590a8/shell/in -m "heap"
   `chip`, `info`, `adc`, `calc`, filesystem commands, `settings`, `time`,
   `reboot`, `run <path>`, `post`, `mqtt`, `onchange`, `relay`, `servo`,
   `sensor`, `motor`, `beep`, `oled`, `set`, `vars`, `schedule`, `powerprofile`,
-  `help`, `#` comments, `while`/`if` control flow.
+  `help`, `#` comments.
+- Block keywords (`if`, `while`, `try`) are **script-file only** — they
+  report `Unknown command` over `shell/in`, since each line dispatches as
+  a single command.
 - **Not** available: `about`, `pull`, `update`, `serve`, `i2c`, `notepad`,
   `cpufreq`, `fs`, `cls`, `reset`,
   `run list|install|uninstall`.

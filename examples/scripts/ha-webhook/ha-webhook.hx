@@ -4,6 +4,8 @@
 # pin against the RAM-only prev flag; on either edge it POSTs to a Home
 # Assistant webhook notification -- {"state":"open"} or {"state":"closed"} --
 # no MQTT broker required, no HA integration config beyond the automation.
+# A failed POST rolls prev back inside try/catch, so the next 2 s tick
+# retries the edge instead of desyncing HA until the door moves again.
 # Edit the URL to your HA host and the webhook_id you picked. Post expands
 # $vars leniently; the door class edge still reaches MQTT/HA discovery too
 # if the broker is up. Wiring: reed D2 (GPIO4) to GND + external 10k pull-up
@@ -17,10 +19,15 @@ end
 
 set open = readpin 4
 if $open != $prev
+  set old = $prev
   set prev = $open
-  if $open == 1
-    post http://homeassistant.local:8123/api/webhook/harixos_door {"state":"open"}
-  else
-    post http://homeassistant.local:8123/api/webhook/harixos_door {"state":"closed"}
+  try
+    if $open == 1
+      post http://homeassistant.local:8123/api/webhook/harixos_door {"state":"open"}
+    else
+      post http://homeassistant.local:8123/api/webhook/harixos_door {"state":"closed"}
+    end
+  catch
+    set prev = $old
   end
 end

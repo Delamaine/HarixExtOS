@@ -1049,6 +1049,8 @@ void ScriptEngine::printHelp(Stream &output) {
   output.println(F("  if/else/end             Conditional blocks"));
   output.println(F("  while <cond>/end        Loop while condition is true"));
   output.println(F("  break                   Exit innermost while loop"));
+  output.println(F("  try ... catch ... end   Catch errors, $error holds message"));
+  output.println(F("  throw <text>            Raise a custom error"));
   output.println(F("  init ... end            Run block once per boot, later runs skip it"));
   output.println(F("  schedule add|remove|run|list [args]  Cron tasks (idempotent add)"));
   output.println(F("  powerprofile <profile>|set <profile>|apply|status  WiFi sleep profile"));

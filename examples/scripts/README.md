@@ -17,9 +17,9 @@ bullet under `init` in [SCRIPT-REFERENCE.md](../../SCRIPT-REFERENCE.md).
 - [daily-digest](daily-digest/README.md) — 08:00 health digest to console and ntfy; the `print` + lenient `$vars` example.
 - [door-chime](door-chime/README.md) — Plays a short melody on each door open; mute knob over MQTT.
 - [greenhouse-alert](greenhouse-alert/README.md) — DHT22 over-limit alarm with remote temperature/humidity thresholds.
-- [leak-webhook](leak-webhook/README.md) — Soil moisture past a threshold fires an HTTP webhook with the live reading.
+- [leak-webhook](leak-webhook/README.md) — Soil moisture past a threshold fires an HTTP webhook with the live reading; a failed post retries until delivered.
 - [parking-assist](parking-assist/README.md) — HC-SR04 beeps: slow under `warn`, fast under `stop`; both retunable.
-- [sos-alarm](sos-alarm/README.md) — Panic button sends an urgent ntfy push; cooldown stops bounces.
+- [sos-alarm](sos-alarm/README.md) — Panic button sends an urgent ntfy push; cooldown stops bounces, a failed post clears it for retry.
 - [weather-station](weather-station/README.md) — BME280 + BH1750 telemetry every 15 min with a frost alarm.
 
 ## Climate & control loops
@@ -52,10 +52,10 @@ bullet under `init` in [SCRIPT-REFERENCE.md](../../SCRIPT-REFERENCE.md).
 
 - [bridge-status](bridge-status/README.md) — Tasmota-style JSON telemetry every 5 min on a fixed topic like `tele/harixos/state`.
 - [doorbell-remote](doorbell-remote/README.md) — Reed door sensor on D2 to MQTT/HA `door` entity plus local buzzer check.
-- [ha-webhook](ha-webhook/README.md) — Door state as HTTP POST to a Home Assistant webhook; no broker needed.
+- [ha-webhook](ha-webhook/README.md) — Door state as HTTP POST to a Home Assistant webhook; no broker needed; retries a failed edge on the next tick.
 - [lamp-remote](lamp-remote/README.md) — A0 light telemetry plus lamp relay with dark-as-fallback local check.
 - [oled-status](oled-status/README.md) — Live SSD1306 status board: time, heap and uptime, refreshed every second.
 - [pin-mirror](pin-mirror/README.md) — Input pin mirrored to a relay, edges published, remote override on `shell/in`.
-- [remote-button](remote-button/README.md) — Button on one NodeMCU drives a `vars` knob on another over MQTT.
+- [remote-button](remote-button/README.md) — Button on one NodeMCU drives a `vars` knob on another over MQTT; a failed publish re-publishes while held.
 - [scene-ack](scene-ack/README.md) — Remote scene sets relays and confirms the applied value on `stat/harixos/scene`.
 - [two-device](two-device/README.md) — Shell one-liners plus a broker-side MQTT forwarder driving a second device; README only.

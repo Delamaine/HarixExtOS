@@ -17,7 +17,9 @@ momentary button ──┬──────────────────
 button other side ─┘
 ```
 
-The script fires on the press edge (released → pressed).
+The script fires on the press edge (released → pressed). A failed publish
+is rolled back inside `try`/`catch`, so the next 2 s poll re-publishes a
+still-held button instead of swallowing the press.
 
 ## Setup (button device)
 

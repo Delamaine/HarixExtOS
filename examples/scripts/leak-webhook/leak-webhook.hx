@@ -5,6 +5,8 @@
 # below $wet (wet floor / leak), the script posts a webhook once per wet
 # episode: the RAM-only active flag edge-triggers the post and re-arms when
 # the sensor dries (after a reboot a still-wet sensor posts once more).
+# A failed post (WiFi down, broker unreachable) clears the flag inside
+# try/catch, so the next 30 s tick retries until the alert is delivered.
 # The webhook body embeds the live reading via $reading -- post expands
 # $vars leniently (defined vars substitute, undefined $name stays literal,
 # so JSON survives). Put your own ntfy/ntfy.sh (or any HTTP) topic URL in
@@ -23,7 +25,11 @@ if $raw < $wet
   if $active == 0
     set active = 1
     set reading = $raw
-    post https://ntfy.sh/harixos-leak {"event":"leak","raw":"$reading"}
+    try
+      post https://ntfy.sh/harixos-leak {"event":"leak","raw":"$reading"}
+    catch
+      set active = 0
+    end
   end
 else
   set active = 0

@@ -66,3 +66,6 @@ mosquitto_pub -t '<prefix>/shell/in' -m 'run /scripts/ha-webhook.hx'   # test fi
   the webhook is the belt, discovery is the braces.
 - `prev` is RAM-only: after a reboot the current door state posts once,
   then the script latches.
+- A failed POST rolls `prev` back inside `try`/`catch`, so the next 2 s tick
+  retries that edge — while HA is down you get one blocking HTTP attempt per
+  tick per edge, never a silent desync until the door moves again.

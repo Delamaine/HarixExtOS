@@ -9,7 +9,8 @@ threshold — wet floor, burst pipe, overflowing sump.
 
 The post is **edge-triggered**: a RAM-only `active` flag fires the webhook
 once per wet episode and re-arms when the sensor dries, so a soaked sensor
-does not spam your phone every 30 s.
+does not spam your phone every 30 s. A failed post (WiFi down) clears
+`active` inside `try`/`catch`, so the next tick retries until the alert lands.
 
 ## Wiring (NodeMCU v2)
 
