@@ -352,7 +352,7 @@ void handleHelp(const TokenizedLine &cmd);
 void handleWifi(const TokenizedLine &cmd);
 void handleGpio(const TokenizedLine &cmd);
 void handleI2c(const TokenizedLine &cmd);
-void handleFs(const TokenizedLine &cmd);
+void handleFs(const TokenizedLine &cmd, const String &rawLine);
 void handlePwd();
 void handleCd(const TokenizedLine &cmd);
 void handleLs(const TokenizedLine &cmd);
@@ -366,7 +366,9 @@ void handleWrite(const TokenizedLine &cmd);
 void handleAppend(const TokenizedLine &cmd);
 void handleNotepad(const TokenizedLine &cmd);
 void handlePost(const TokenizedLine &cmd);
-void handleMqtt(const String &line);
+ void handleMqtt(const String &line);
+ void handleGrep(const String &args);
+ static String argsAfterVerb(const String &line);
   void handleOnchange(const String &line);
   void handleRelay(const String &line);
 void handleSettings(const TokenizedLine &cmd);
@@ -613,6 +615,20 @@ void handleCat(const TokenizedLine &cmd) {
   Serial.print(content);
   if (!content.endsWith("\n")) {
     Serial.println();
+  }
+}
+
+// Everything after the line's first (unquoted, never space-bearing)
+// verb. Quotes inside the remaining args stay untouched.
+static String argsAfterVerb(const String &line) {
+  int sp = line.indexOf(' ');
+  return sp < 0 ? String() : line.substring(sp + 1);
+}
+
+void handleGrep(const String &args) {
+  const char *err = harixos::runGrep(args, currentWorkingDirectory, Serial);
+  if (err != nullptr) {
+    Serial.println(err);
   }
 }
 
@@ -1874,6 +1890,7 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  cp <src> <dst>       Copy files"));
     Serial.println(F("  mv <src> <dst>       Move files"));
     Serial.println(F("  cat <path>           Print file contents"));
+ Serial.println(F("  grep [-i -c -v -r] <pattern> <path>  Search files"));
     Serial.println(F("  write <path> <txt>   Replace file contents"));
     Serial.println(F("  append <path> <txt>  Append to file"));
     Serial.println(F("  fs ...               Filesystem tools, same as top-level (fs pwd|cd|ls|mkdir|touch|rm|cp|mv|cat|write|append)"));
@@ -2183,6 +2200,8 @@ void executeCommand(const String &line) {
     handleMv(cmd);
   } else if (command == F("cat")) {
     handleCat(cmd);
+  } else if (command == F("grep")) {
+    handleGrep(argsAfterVerb(line));
   } else if (command == F("write")) {
     handleWrite(cmd);
   } else if (command == F("append")) {
@@ -2208,7 +2227,7 @@ void executeCommand(const String &line) {
   } else if (command == F("gpio")) {
     handleGpio(cmd);
   } else if (command == F("fs")) {
-    handleFs(cmd);
+    handleFs(cmd, line);
   } else if (command == F("calc")) {
     handleCalc(line);
   } else if (command == F("set")) {
@@ -2347,7 +2366,7 @@ void printBanner() {
   Serial.println();
 }
 
-void handleFs(const TokenizedLine &cmd) {
+void handleFs(const TokenizedLine &cmd, const String &rawLine) {
   if (cmd.count < 2) {
     handleLs(cmd);
     return;
@@ -2371,6 +2390,10 @@ void handleFs(const TokenizedLine &cmd) {
     handleMv(cmd);
   } else if (action == F("cat") || action == F("read")) {
     handleCat(cmd);
+  } else if (action == F("grep")) {
+    // strip the two unquoted verbs ("fs", "grep") so quotes in the
+    // remaining args stay intact for runGrep's parser
+    handleGrep(argsAfterVerb(argsAfterVerb(rawLine)));
   } else if (action == F("write")) {
     handleWrite(cmd);
   } else if (action == F("append")) {

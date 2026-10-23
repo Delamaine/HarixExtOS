@@ -9,7 +9,7 @@ keyword below works identically in both:
 `try`/`catch`/`throw`, `init`/`end`, `#`
 **System values:** `heap`, `uptime`, `chip`, `info`, `adc`, `calc`
 **Filesystem:** `pwd`, `cd`, `ls`, `mkdir`, `touch`, `rm`, `cp`, `mv`,
-`cat`, `write`, `append`
+`cat`, `grep`, `write`, `append`
 **Settings and time:** `settings`, `time`, `reboot`
 **WiFi and GPIO:** `wifi`, `gpio`, `beep`, `delay`, `system`, `run <path>`, `help`
 **Servo:** `servo attach`, `servo detach`, `servo write`, `servo read`, `servo list`

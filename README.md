@@ -34,8 +34,9 @@ Currently, HarixOS officially supports the **ESP8266** family. However, the arch
 ---
 
 - **Linux-like filesystem support** using LittleFS  
-  (`pwd`, `cd`, `ls`, `mkdir`, `touch`, `rm`, `cp`, `mv`, `cat`, `write`, `append`)  
+  (`pwd`, `cd`, `ls`, `mkdir`, `touch`, `rm`, `cp`, `mv`, `cat`, `grep`, `write`, `append`)  
 - **Directory-based file operations** with recursive listing support (`ls -R`)  
+- **File content search** (`grep [-i -c -v -r]`, literal substring, shell and scripts)  
 - **Filesystem utilities layer** (`fs ...`) for advanced storage management  
 
 ---

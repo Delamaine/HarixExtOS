@@ -451,6 +451,14 @@ ApiResult ScriptEngine::handleFilesystemCommand(const String &name,
     return ApiResult(API_OK, "");
   }
 
+  if (name == "grep") {
+    const char *err = harixos::runGrep(args, cwd, output);
+    if (err != nullptr) {
+      return ApiResult(API_INVALID_ARGUMENT, err);
+    }
+    return ApiResult(API_OK, "");
+  }
+
   if (name == "rm") {
     String remaining = args;
     String first = takeWord(remaining);
@@ -677,7 +685,8 @@ ApiResult ScriptEngine::executeCommand(const String &command, Stream &output) {
   } else if (cmd.name == "pwd" || cmd.name == "cd" || cmd.name == "ls" ||
              cmd.name == "mkdir" || cmd.name == "touch" || cmd.name == "rm" ||
              cmd.name == "cp" || cmd.name == "mv" || cmd.name == "cat" ||
-             cmd.name == "write" || cmd.name == "append") {
+             cmd.name == "grep" || cmd.name == "write" ||
+             cmd.name == "append") {
     return handleFilesystemCommand(cmd.name, cmd.args, output);
   } else if (cmd.name == "settings" || cmd.name == "time" ||
              cmd.name == "reboot") {
@@ -1023,6 +1032,7 @@ void ScriptEngine::printHelp(Stream &output) {
   output.println(F("  cp <src> <dst>          Copy files"));
   output.println(F("  mv <src> <dst>          Move files"));
   output.println(F("  cat <path>              Print file content"));
+  output.println(F("  grep [-i -c -v -r] <pattern> <path>  Search files"));
   output.println(F("  write <path> <content>  Write a file"));
   output.println(F("  append <path> <content> Append to a file"));
   output.println();

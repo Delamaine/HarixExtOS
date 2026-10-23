@@ -83,6 +83,15 @@ e.g. `fs ls`)
 - `mkdir <path>` — Create directory recursively
 - `touch <path>` — Create empty file
 - `cat <file>` — Display file contents
+- `grep [-i] [-c] [-v] [-r] <pattern> <path>` — Print matching lines as
+  `line#: text` (`/path:line#: text` with `-r`). Literal substring, never
+  regex; quote patterns containing spaces (`grep "foo bar" file`); flags
+  must come before the pattern and are separate tokens (`-ic` is not
+  valid). `-i` ignores case, `-v` inverts, `-c` prints a match count
+  (with `-r`, one `<path>: <n>` line per file), `-r` recurses
+  directories. No matches prints `grep: no matches` (not an error);
+  a directory path needs `-r`. Lines over 256 chars are truncated for
+  matching. Also a script keyword — errors are catchable in `try`.
 - `write <file> <text...>` — Overwrite file with text
 - `append <file> <text...>` — Append text to file
 - `rm [-r] <path>` — Remove file or directory

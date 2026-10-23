@@ -479,7 +479,7 @@ New keywords call the API/filesystem layer rather than duplicating
 
 **Add:** `set`, `heap`, `uptime`, `chip`, `info`, `adc`, `pwd`, `cd`,
 `ls`, `mkdir`, `touch`, `rm`, `cp`, `mv`, `cat`, `write`, `append`,
-`settings`, `time`, `reboot`, `calc`
+`settings`, `time`, `reboot`, `calc`; `grep` (added 2026-10-21)
 
 **Backing calls already exist:** `harixos::writeText` / `readText` /
 `makeDirectory` / `removePath` / `copyFile` / `movePath` / `listDirectory`
