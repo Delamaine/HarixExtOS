@@ -4,7 +4,9 @@
 # boot. Remote drive over <prefix>/shell/in:
 #   vars set cmd=open    vars set cmd=close
 # Motor speed is $pct (default 75 %, tune with vars set pct=60 then vars save).
-# The command is RAM-only (idle after reboot). Travel ends at the limit switch
+# The command never survives a reboot: init force-clears it to idle, so a
+# vars save that caught a pending cmd cannot auto-drive the curtain at boot.
+# Travel ends at the limit switch
 # or after $travel seconds, whichever comes first -- a while loop with break.
 # A travel run blocks shell/scheduler for up to $travel seconds.
 # Wiring: driver direction D5 (GPIO14), driver speed/PWM D6 (GPIO12); open-limit
@@ -16,7 +18,7 @@ init
   onchange add 4 both window
   onchange add 13 both window
   schedule add * * * * * * run /scripts/curtain-motor.hx
-  vars setdefault cmd=idle
+  set cmd = idle
   vars setdefault travel=9
   vars setdefault pct=75
 end

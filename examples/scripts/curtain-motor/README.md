@@ -56,7 +56,7 @@ mosquitto_pub -t '<prefix>/shell/in' -m 'vars set cmd=open'    # raise the curta
 mosquitto_pub -t '<prefix>/shell/in' -m 'vars set cmd=close'   # lower it
 mosquitto_pub -t '<prefix>/shell/in' -m 'vars set travel=12'   # longer travel budget (s)
 mosquitto_pub -t '<prefix>/shell/in' -m 'vars set pct=50'      # slower motor (0-100 %)
-mosquitto_pub -t '<prefix>/shell/in' -m 'vars save'            # persist travel/pct (cmd stays RAM-only)
+mosquitto_pub -t '<prefix>/shell/in' -m 'vars save'            # persist every var (cmd still resets at boot)
 ```
 
 ## Notes
