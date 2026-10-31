@@ -243,17 +243,7 @@ TokenizedLine tokenize(const String &line) {
 }
 
 bool parsePin(const String &value, uint8_t &pin) {
-  if (value.length() == 0) {
-    return false;
-  }
-
-  long parsed = value.toInt();
-  if (parsed < 0 || parsed > 255) {
-    return false;
-  }
-
-  pin = static_cast<uint8_t>(parsed);
-  return true;
+  return harixos::api::pins::parse(value.c_str(), &pin);
 }
 
 void printSystemInfo() {
