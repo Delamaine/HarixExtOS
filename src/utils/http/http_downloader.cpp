@@ -63,7 +63,7 @@ uint32_t HttpDownloader::getFileSize(const String &url) {
     http->setTimeout(3000);
     http->setUserAgent("HarixOS/1.0 (ESP8266)");
     http->setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    String full = String("https://") + host + path;
+    String full = String("https://") + host + ":" + String(port) + path;
     if (!http->begin(*client, full)) { delete http; delete client; return 0; }
     
     int code = http->sendRequest("HEAD");
@@ -87,7 +87,7 @@ uint32_t HttpDownloader::getFileSize(const String &url) {
     http->setTimeout(3000);
     http->setUserAgent("HarixOS/1.0 (ESP8266)");
     http->setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    String full = String("http://") + host + path;
+    String full = String("http://") + host + ":" + String(port) + path;
     if (!http->begin(*client, full)) { delete http; delete client; return 0; }
     
     int code = http->sendRequest("HEAD");
@@ -120,7 +120,7 @@ uint32_t HttpDownloader::getStorageInfo(uint32_t &totalBytes, uint32_t &usedByte
 
 bool HttpDownloader::performDownload(const String &protocol, const String &host, uint16_t port,
                                      const String &path, const String &savePath, Stream &output) {
-  String url = protocol + "://" + host + path;
+  String url = protocol + "://" + host + ":" + String(port) + path;
   
   if (!ensureDirectory(savePath)) {
     output.println(F("Failed to create directory for save path."));
