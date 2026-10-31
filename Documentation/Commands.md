@@ -138,11 +138,16 @@ IoT (MQTT / webhooks)
 - `mqtt stop` / `mqtt off` — Disable the MQTT service
 - `mqtt pub <topic> <payload>` — Publish a raw message (topic is used verbatim,
   no prefix is added)
+- `mqtt set host|port|user|pass <value>` — Set broker address, port or
+  credentials (persists to settings and reconnects immediately if the
+  service is enabled; `-` clears user/pass; the password is never echoed)
 
   Broker, credentials, prefix and telemetry interval come from `mqtt_host`,
   `mqtt_port`, `mqtt_user`, `mqtt_pass`, `mqtt_prefix`, `mqtt_interval`,
-  `mqtt_discover`, `mqtt_enabled` in `/harixos/settings.cfg` — there is no
-  `settings mqtt_*` command; edit the file and run `settings reload`.
+  `mqtt_discover`, `mqtt_enabled` in `/harixos/settings.cfg`. Host, port and
+  credentials are set with `mqtt set host|port|user|pass` (above); the
+  remaining keys have no command — edit the file (e.g. `notepad
+  /harixos/settings.cfg`) and run `settings reload`.
   Full topic map, HA discovery and examples: `Documentation/ha-mqtt.md`;
   broker auth and ACLs: `Documentation/MQTT-Security.md`.
 

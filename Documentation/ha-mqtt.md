@@ -35,9 +35,20 @@ mosquitto_pub -t test -m hello
 
 ### Configuration
 
-MQTT settings are `mqtt_*` keys in `/harixos/settings.cfg`. There is **no**
-`settings mqtt_*` subcommand — edit the file (e.g. `notepad
-/harixos/settings.cfg`) and run `settings reload`.
+MQTT settings are `mqtt_*` keys in `/harixos/settings.cfg`. Broker host,
+port and credentials are set from the command line — no restart needed:
+
+```bash
+mqtt set host 192.168.20.68
+mqtt set port 1883
+mqtt set user 'harixos/a590a8'
+mqtt set pass <password>       # '-' clears user/pass (anonymous brokers)
+```
+
+Each persists to the file and reconnects immediately if the service is
+enabled. The remaining keys (`mqtt_prefix`, `mqtt_interval`,
+`mqtt_discover`; `mqtt_enabled` has `mqtt start`/`mqtt stop`) still need a
+file edit (e.g. `notepad /harixos/settings.cfg`) and `settings reload`.
 
 | Key | Default | Description |
 |---|---|---|

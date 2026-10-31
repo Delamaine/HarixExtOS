@@ -1043,7 +1043,7 @@ void ScriptEngine::printHelp(Stream &output) {
   output.println();
   output.println(F("IoT:"));
   output.println(F("  post <url> <body> [ctype]  HTTP POST webhook"));
-  output.println(F("  mqtt status|start|stop|on|off|pub <topic> <payload>  MQTT service"));
+  output.println(F("  mqtt status|start|stop|on|off|pub <topic> <payload>|set host|port|user|pass <value>  MQTT"));
   output.println(F("  onchange add|remove|list [args]  GPIO onchange rules"));
   output.println();
   output.println(F("Drivers:"));

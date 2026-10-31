@@ -1912,7 +1912,7 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  set <name> = <expr>  Store a variable for $name in scripts"));
     Serial.println(F("  serve ...            HTTP file server tools (serve start|stop|status|serve <file> [port])"));
     Serial.println(F("  post <url> <body>    Send HTTP webhook (POST)"));
-    Serial.println(F("  mqtt ...             MQTT/IoT service (mqtt status|start|stop|on|off|pub)"));
+    Serial.println(F("  mqtt ...             MQTT/IoT service (mqtt status|start|stop|on|off|pub|set)"));
     Serial.println(F("  onchange ...         GPIO onchange rules (onchange add|remove|list)"));
     Serial.println(F("  vars ...             Variable storage (vars list|set|get|del|save|load|clear)"));
     Serial.println();

@@ -672,8 +672,58 @@ harixos::api::ApiResult handleCommand(const String &argsIn, Stream &output) {
     return api::ApiResult(api::API_OK, "mqtt: published");
   }
 
+  if (action == "set") {
+    int sp = tail.indexOf(' ');
+    String key = sp < 0 ? tail : tail.substring(0, sp);
+    String value = sp < 0 ? String() : tail.substring(sp + 1);
+    value.trim();
+    key.toLowerCase();
+    if (value.length() == 0) {
+      return api::ApiResult(api::API_INVALID_ARGUMENT,
+                            "Usage: mqtt set host|port|user|pass <value> ('-' clears user/pass)");
+    }
+    if (key == "host") {
+      if (value == "-") {
+        return api::ApiResult(api::API_INVALID_ARGUMENT, "mqtt: host cannot be cleared");
+      }
+      shellSettings.mqttHost = value;
+    } else if (key == "port") {
+      // Digits-only, 1..65535 — String.toInt maps garbage to 0 (see pins.h parse).
+      if (value.length() > 5) {
+        return api::ApiResult(api::API_INVALID_ARGUMENT, "mqtt: port must be 1-65535");
+      }
+      uint32_t port = 0;
+      for (unsigned i = 0; i < value.length(); ++i) {
+        char c = value[i];
+        if (c < '0' || c > '9') {
+          return api::ApiResult(api::API_INVALID_ARGUMENT, "mqtt: port must be 1-65535");
+        }
+        port = port * 10 + (uint32_t)(c - '0');
+      }
+      if (port < 1 || port > 65535) {
+        return api::ApiResult(api::API_INVALID_ARGUMENT, "mqtt: port must be 1-65535");
+      }
+      shellSettings.mqttPort = (uint16_t)port;
+    } else if (key == "user") {
+      shellSettings.mqttUser = value == "-" ? String() : value;
+    } else if (key == "pass") {
+      shellSettings.mqttPass = value == "-" ? String() : value;
+    } else {
+      return api::ApiResult(api::API_INVALID_ARGUMENT,
+                            "Usage: mqtt set host|port|user|pass <value> ('-' clears user/pass)");
+    }
+    if (!saveSettings(shellSettings)) {
+      return api::ApiResult(api::API_ERROR, "mqtt: set, but settings save failed");
+    }
+    if (shellSettings.mqttEnabled) {
+      disconnectGracefully();
+      resetBackoff();
+    }
+    return api::ApiResult(api::API_OK, "mqtt: " + key + " set");
+  }
+
   return api::ApiResult(api::API_INVALID_ARGUMENT,
-                        "Usage: mqtt status|start|stop|on|off|pub <topic> <payload>");
+                        "Usage: mqtt status|start|stop|on|off|pub <topic> <payload>|set host|port|user|pass <value>");
 }
 
 }  // namespace iot

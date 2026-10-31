@@ -52,8 +52,8 @@ plus the two `mqtt_user`/`mqtt_pass` keys on that device — **no ACL edits**:
 ```sh
 mosquitto_passwd /etc/mosquitto/passwd 'harixos/<chipid>'   # one line per device
 # then on the device:
-notepad /harixos/settings.cfg    # set mqtt_user=harixos/<chipid> and mqtt_pass=<password>
-settings reload
+mqtt set user 'harixos/<chipid>'
+mqtt set pass <password>
 ```
 
 `admin` deliberately cannot publish retained state topics — the shell inbox
@@ -119,13 +119,13 @@ Notes:
 
 ## Client setup
 
-1. **Device** — edit `/harixos/settings.cfg`:
-   `mqtt_user=` = your `mqtt_prefix` (e.g. `harixos/a59450`),
-   `mqtt_pass=<that device's password>`, `mqtt_host=<broker>`, then
-   `settings reload` (and `mqtt start` if not enabled). `mqtt status` must
-   show the user and a masked password. **Adding another ESP8266:** run
+1. **Device** — set the client keys: `mqtt set user 'harixos/<chipid>'`,
+   `mqtt set pass <that device's password>`, `mqtt set host <broker>` (and
+   `mqtt set port <port>` if not 1883), then `mqtt start` if not enabled.
+   `mqtt status` must show the user and a masked password. **Adding another
+   ESP8266:** run
    `mosquitto_passwd /etc/mosquitto/passwd 'harixos/<chipid>'`, then the
-   same two keys on that device — nothing on the broker changes beyond the
+   same commands on that device — nothing on the broker changes beyond the
    password line.
 2. **Home Assistant** — in the MQTT integration config, username
    `homeassistant` + its password. Discovery keeps working (device publishes
