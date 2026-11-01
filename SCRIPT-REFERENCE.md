@@ -19,6 +19,8 @@ keyword below works identically in both:
 **IoT:** `post`, `mqtt`, `relay` set|toggle|status|list, `onchange`, `sensor` publish
 **Automation:** `schedule add|remove|run|list`
 **Variables:** `set`, `vars list|set|setdefault|get|del|save|load|clear`
+**History:** `history`, `exec <n>` (console + `shell/in` input also expands a
+whole-line `!<n>` to entry n before dispatch)
 **Power:** `powerprofile <full|balanced|powersave|light|minimal|off> | set <profile> | apply | status`
 
 Shell-only (typing these inside a script or `schedule add` reports
@@ -26,6 +28,22 @@ Shell-only (typing these inside a script or `schedule add` reports
 `cpufreq`, `fs`, `cls`, `reset`, and
 the `run list|install|uninstall` subcommands (spec §8 for the deferred
 group).
+
+## History (console + shell/in)
+
+The serial console and MQTT `shell/in` lines share one 16-entry command
+ring (RAM-only, cleared by reboot; `wifi connect` never enters it).
+Numbering is absolute: 1 = oldest entry, count = newest.
+
+- `history` — list the ring as `N  <command>`
+- `exec <n>` — re-run entry n through the same dispatcher; refuses nested
+  `exec`/`!` entries so it cannot recurse
+- `!<n>` — whole-line shorthand expanded on input (serial console and
+  `shell/in` only, before the line dispatches). From interactive bash,
+  quote it: `mosquitto_pub -t <prefix>/shell/in -m '!5'`
+
+`.hx` scripts and scheduled commands neither push to the ring nor expand
+`!<n>` — bash-like: history expansion is interactive-only.
 
 ## New Commands (shell only — not script keywords)
 

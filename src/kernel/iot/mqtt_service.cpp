@@ -6,6 +6,7 @@
 
 #include "../../apps/settings/settings.h"
 #include "../../api/script_engine.h"
+#include "../../api/cmd_history.h"
 #include "../../api/system_api.h"
 #include "../../api/servo.h"
 #include "../../api/motor.h"
@@ -484,9 +485,24 @@ void update() {
     char line[InboundQueue::kLineMax];
     if (!inbound().pop(line)) break;
 
+    // History: expand a whole-line "!n" reference and record the effective
+    // line in the same ring as the serial console (passwords stay out).
+    String cmdLine(line);
+    cmdLine.trim();
+    char expanded[harixos::api::history::kMaxLine + 1];
+    harixos::api::ApiResult r(harixos::api::API_OK, "");
     StringStream capture;
-    harixos::api::ApiResult r =
-        harixos::api::ScriptEngine::executeCommand(String(line), capture);
+    if (!harixos::api::history::expand(cmdLine.c_str(), expanded,
+                                       sizeof(expanded))) {
+      r = harixos::api::ApiResult(harixos::api::API_INVALID_ARGUMENT,
+                                  String(expanded));
+    } else {
+      cmdLine = expanded;
+      if (!cmdLine.startsWith("wifi connect")) {
+        harixos::api::history::push(cmdLine.c_str());
+      }
+      r = harixos::api::ScriptEngine::executeCommand(cmdLine, capture);
+    }
 
     String reply;
     if (r.isError()) {

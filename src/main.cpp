@@ -1915,6 +1915,8 @@ void handleHelp(const TokenizedLine &cmd) {
     Serial.println(F("  mqtt ...             MQTT/IoT service (mqtt status|start|stop|on|off|pub|set)"));
     Serial.println(F("  onchange ...         GPIO onchange rules (onchange add|remove|list)"));
     Serial.println(F("  vars ...             Variable storage (vars list|set|get|del|save|load|clear)"));
+    Serial.println(F("  history              List recent commands (oldest = 1)"));
+    Serial.println(F("  exec <n>             Re-run history entry n (!n expands on input too)"));
     Serial.println();
     Serial.println(F("Help topics:"));
     Serial.println(F("  help ") + String(kHelpTopics) + F("  Show topic help"));
@@ -2260,6 +2262,39 @@ void executeCommand(const String &line) {
     Serial.println(result.message);
   } else if (command == F("vars")) {
     handleVars(line.substring(5));
+  } else if (command == F("history")) {
+    size_t n = harixos::api::history::count();
+    if (n == 0) {
+      Serial.println(F("History is empty."));
+    } else {
+      for (size_t i = 1; i <= n; ++i) {
+        Serial.printf("%u  %s\r\n", (unsigned)i, harixos::api::history::at(i));
+      }
+    }
+  } else if (command == F("exec")) {
+    if (cmd.count < 2 || cmd.tokens[1].length() > 5) {
+      Serial.println(F("ERROR: Usage: exec <n>"));
+    } else {
+      size_t n = 0;
+      bool digits = true;
+      for (unsigned i = 0; i < cmd.tokens[1].length(); ++i) {
+        char c = cmd.tokens[1][i];
+        if (c < '0' || c > '9') {
+          digits = false;
+          break;
+        }
+        n = n * 10 + (size_t)(c - '0');
+      }
+      const char *entry =
+          digits ? harixos::api::history::at(n) : nullptr;
+      if (entry == nullptr) {
+        Serial.println(String(F("ERROR: no history entry ")) + cmd.tokens[1]);
+      } else if (!harixos::api::history::canExec(entry)) {
+        Serial.println(F("ERROR: cannot exec a history reference"));
+      } else {
+        executeCommand(String(entry));
+      }
+    }
   } else {
     Serial.printf("Unknown command: %s\r\n", cmd.tokens[0].c_str());
     Serial.println(F("Type help for the command list."));
@@ -2318,11 +2353,19 @@ void handleSerialInput() {
         inputLine = String();
         promptVisible = false;
         histCursor = 0;
-        // Passwords: `wifi connect <ssid> <pass>` stays out of the ring.
-        if (!line.startsWith("wifi connect")) {
-          harixos::api::history::push(line.c_str());
+        char expanded[harixos::api::history::kMaxLine + 1];
+        if (!harixos::api::history::expand(line.c_str(), expanded,
+                                           sizeof(expanded))) {
+          Serial.print(F("ERROR: "));
+          Serial.println(expanded);
+        } else {
+          line = expanded;
+          // Passwords: `wifi connect <ssid> <pass>` stays out of the ring.
+          if (!line.startsWith("wifi connect")) {
+            harixos::api::history::push(line.c_str());
+          }
+          executeCommand(line);
         }
-        executeCommand(line);
       } else if (promptVisible) {
         Serial.println();
       }

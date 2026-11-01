@@ -130,6 +130,7 @@ published in chunks of ≤ 900 bytes.
 mosquitto_pub -t harixos/a590a8/shell/in -m "gpio 2 on"
 mosquitto_pub -t harixos/a590a8/shell/in -m "wifi status"
 mosquitto_pub -t harixos/a590a8/shell/in -m "heap"
+mosquitto_pub -t harixos/a590a8/shell/in -m "history"
 ```
 
 `shell/in` runs the **script dispatcher** (the keyword list at the top of
@@ -139,7 +140,7 @@ mosquitto_pub -t harixos/a590a8/shell/in -m "heap"
   `chip`, `info`, `adc`, `calc`, filesystem commands, `settings`, `time`,
   `reboot`, `run <path>`, `post`, `mqtt`, `onchange`, `relay`, `servo`,
   `sensor`, `motor`, `beep`, `oled`, `set`, `vars`, `schedule`, `powerprofile`,
-  `help`, `#` comments.
+  `history`, `exec <n>`, `help`, `#` comments.
 - Block keywords (`if`, `while`, `try`) are **script-file only** — they
   report `Unknown command` over `shell/in`, since each line dispatches as
   a single command.
@@ -148,6 +149,11 @@ mosquitto_pub -t harixos/a590a8/shell/in -m "heap"
   `run list|install|uninstall`.
 - `gpio` accepts both argument orders: the shell form (`gpio write <pin> …`,
   same as the serial console) and the script form (`gpio <pin> on|off|read|…`).
+- `shell/in` lines share the console's 16-entry command-history ring:
+  `history` lists it (oldest = 1), `exec <n>` re-runs entry n, and a
+  whole-line `!<n>` payload expands to entry n before dispatch. From an
+  interactive bash, quote the bang so bash doesn't expand it first
+  (`-m '!5'`); PowerShell needs no quoting.
 
 Anyone who can publish to `shell/in` controls the device — treat broker
 credentials as device ownership and keep the broker on a trusted LAN.

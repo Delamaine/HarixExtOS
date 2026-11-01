@@ -11,6 +11,9 @@ Core shell commands
 - `reboot` — Restart the device (`reset` is an alias that prints a rename notice)
 - `adc` (or `a0`) — Read analog pin A0
 - `clear` (or `cls`) — Clear serial console (emulator)
+- `history` — List recent commands (oldest = 1); 16-entry RAM ring shared with MQTT `shell/in` lines, cleared by reboot
+- `exec <n>` — Re-run history entry `n` (works over `shell/in` too; refuses nested `exec`/`!` entries)
+- `!<n>` — Whole-line shorthand that expands to entry `n` before running (serial console and `shell/in` input only). From interactive bash, quote it so bash's own history expansion doesn't eat it: `mosquitto_pub -t <prefix>/shell/in -m '!5'`
 - `update check` — Check for system updates via GitHub
 - `pull <url> <path>` — Download file from the internet (HTTP/HTTPS)
 - `time` — Show time; `time sync`, `time list-tz` (alias `timezones`), `time set` manage NTP/timezone

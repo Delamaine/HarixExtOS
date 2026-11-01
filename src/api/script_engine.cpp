@@ -6,6 +6,7 @@
 #include "expr.h"
 #include "gpio_api.h"
 #include "pins.h"
+#include "cmd_history.h"
 #include "init_gate.h"
 #include "power.h"
 #include "wifi_api.h"
@@ -794,6 +795,40 @@ ApiResult ScriptEngine::executeCommand(const String &command, Stream &output) {
   } else if (cmd.name == "help") {
     printHelp(output);
     return ApiResult(API_OK, "Help displayed");
+  } else if (cmd.name == "history") {
+    size_t n = harixos::api::history::count();
+    if (n == 0) {
+      output.println(F("History is empty."));
+    } else {
+      for (size_t i = 1; i <= n; ++i) {
+        output.printf("%u  %s\r\n", (unsigned)i, harixos::api::history::at(i));
+      }
+    }
+    return ApiResult(API_OK, "");
+  } else if (cmd.name == "exec") {
+    // exec <n> — re-run history entry n (absolute number from `history`).
+    String arg = cmd.args;
+    arg.trim();
+    if (arg.length() == 0 || arg.length() > 5) {
+      return ApiResult(API_INVALID_ARGUMENT, "Usage: exec <n>");
+    }
+    size_t n = 0;
+    for (unsigned i = 0; i < arg.length(); ++i) {
+      char c = arg[i];
+      if (c < '0' || c > '9') {
+        return ApiResult(API_INVALID_ARGUMENT, "Usage: exec <n>");
+      }
+      n = n * 10 + (size_t)(c - '0');
+    }
+    const char *entry = harixos::api::history::at(n);
+    if (entry == nullptr) {
+      return ApiResult(API_INVALID_ARGUMENT, "no history entry " + arg);
+    }
+    if (!harixos::api::history::canExec(entry)) {
+      return ApiResult(API_INVALID_ARGUMENT,
+                       "cannot exec a history reference");
+    }
+    return executeCommand(String(entry), output);
   } else if (cmd.name == "#") {
     return ApiResult(API_OK, "");  // Comment line
   } else {
@@ -1062,6 +1097,12 @@ void ScriptEngine::printHelp(Stream &output) {
   output.println();
   output.println(F("Output:"));
   output.println(F("  print <text>            Print text to console"));
+  output.println();
+  output.println(F("History:"));
+  output.println(F("  history                 List recent commands (oldest = 1)"));
+  output.println(F("  exec <n>                Re-run history entry n"));
+  output.println(F("  !n                      Expand entry n before running"));
+  output.println(F("                          (console and shell/in input only)"));
   output.println();
   output.println(F("GPIO:"));
   output.println(F("  gpio <pin> on           Set GPIO HIGH"));
