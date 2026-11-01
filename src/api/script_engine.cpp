@@ -5,6 +5,7 @@
 #include "cron.h"
 #include "expr.h"
 #include "gpio_api.h"
+#include "pins.h"
 #include "init_gate.h"
 #include "power.h"
 #include "wifi_api.h"
@@ -94,7 +95,74 @@ ScriptEngine::Command ScriptEngine::parseCommand(const String &line) {
   return {trimmed.substring(0, spacePos), trimmed.substring(spacePos + 1)};
 }
 
+namespace {
+
+// Shell form (what the serial console uses): gpio <action> <pin> [value].
+// Reached only when the first token is an action keyword — valid pins are
+// numeric/GPIO-prefixed, so the two forms never collide.
+ApiResult gpioShellForm(const String &action, const String &rest, Stream &output) {
+  if (action == "list" || action == "pins") {
+    GpioAPI::listAvailablePins(output);
+    return ApiResult(API_OK, "GPIO list displayed");
+  }
+
+  int sp = rest.indexOf(' ');
+  String pinStr = (sp == -1) ? rest : rest.substring(0, sp);
+  String tail = (sp == -1) ? String() : rest.substring(sp + 1);
+  uint8_t pin;
+  if (!pins::parse(pinStr.c_str(), &pin)) {
+    return ApiResult(API_INVALID_ARGUMENT, "Invalid or reserved GPIO for ESP8266.");
+  }
+
+  if (action == "read") {
+    GpioResult result = GpioAPI::read(pin);
+    output.println(result.message);
+    return result;
+  }
+  if (action == "write") {
+    String v = tail;
+    v.toLowerCase();
+    if (v == "on" || v == "1") return GpioAPI::write(pin, HIGH);
+    if (v == "off" || v == "0") return GpioAPI::write(pin, LOW);
+    if (v == "toggle") return GpioAPI::toggle(pin);
+    return ApiResult(API_INVALID_ARGUMENT, "Unknown value. Use on/off/toggle/0/1.");
+  }
+  if (action == "mode") {
+    String m = tail;
+    m.toLowerCase();
+    if (m == "out" || m == "output") return GpioAPI::setMode(pin, OUTPUT);
+    if (m == "pullup" || m == "input_pullup") return GpioAPI::setMode(pin, INPUT_PULLUP);
+    if (m == "in" || m == "input") return GpioAPI::setMode(pin, INPUT);
+    return ApiResult(API_INVALID_ARGUMENT, "Unknown mode. Use in, out, or pullup.");
+  }
+  if (action == "pulse") {
+    int sp2 = tail.indexOf(' ');
+    String c1 = (sp2 == -1) ? tail : tail.substring(0, sp2);
+    String c2 = (sp2 == -1) ? String() : tail.substring(sp2 + 1);
+    int count = c1.toInt();
+    if (count <= 0) count = 1;
+    int delayMs = c2.toInt();
+    if (delayMs <= 0) delayMs = 250;
+    return GpioAPI::pulse(pin, count, delayMs);
+  }
+  return ApiResult(API_INVALID_ARGUMENT, "Unknown GPIO action: " + action);
+}
+
+}  // namespace
+
 ApiResult ScriptEngine::handleGpioCommand(const String &args, Stream &output) {
+  // Two forms, both accepted (console parity for shell/in, scripts, schedule):
+  //   shell:  gpio <action> <pin> ...   e.g. gpio write 5 0
+  //   script: gpio <pin> <action> ...   e.g. gpio 5 on
+  int space0 = args.indexOf(' ');
+  String tok0 = (space0 == -1) ? args : args.substring(0, space0);
+  tok0.toLowerCase();
+  if (tok0 == "read" || tok0 == "write" || tok0 == "mode" ||
+      tok0 == "pulse" || tok0 == "list" || tok0 == "pins") {
+    String shellRest = (space0 == -1) ? String() : args.substring(space0 + 1);
+    return gpioShellForm(tok0, shellRest, output);
+  }
+
   // gpio <pin> <action> [param]
   // Examples:
   //   gpio 2 on
@@ -111,7 +179,10 @@ ApiResult ScriptEngine::handleGpioCommand(const String &args, Stream &output) {
   String pinStr = args.substring(0, space1);
   String rest = args.substring(space1 + 1);
   
-  uint8_t pin = pinStr.toInt();
+  uint8_t pin;
+  if (!pins::parse(pinStr.c_str(), &pin)) {
+    return ApiResult(API_INVALID_ARGUMENT, "Invalid or reserved GPIO for ESP8266.");
+  }
   
   int space2 = rest.indexOf(' ');
   String action = (space2 == -1) ? rest : rest.substring(0, space2);

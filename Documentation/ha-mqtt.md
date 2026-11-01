@@ -146,8 +146,8 @@ mosquitto_pub -t harixos/a590a8/shell/in -m "heap"
 - **Not** available: `about`, `pull`, `update`, `serve`, `i2c`, `notepad`,
   `cpufreq`, `fs`, `cls`, `reset`,
   `run list|install|uninstall`.
-- `gpio` uses the script form (`gpio <pin> on|off|read|toggle|mode|pulse`),
-  not the shell form (`gpio write <pin> …`).
+- `gpio` accepts both argument orders: the shell form (`gpio write <pin> …`,
+  same as the serial console) and the script form (`gpio <pin> on|off|read|…`).
 
 Anyone who can publish to `shell/in` controls the device — treat broker
 credentials as device ownership and keep the broker on a trusted LAN.

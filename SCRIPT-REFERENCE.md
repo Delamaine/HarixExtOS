@@ -336,6 +336,11 @@ end
 
 ## GPIO Command (Hardware Control)
 
+Both argument orders are accepted everywhere (scripts, `schedule`,
+shell/in): the script form below (`gpio <pin> <action>`) and the shell form
+(`gpio write <pin> on|off|toggle|0|1`, `gpio read <pin>`,
+`gpio mode <pin> in|out|pullup`, `gpio pulse <pin> [count] [delay]`).
+
 ### Set Pin State
 ```bash
 gpio 2 on                  # Set GPIO2 HIGH
